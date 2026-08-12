@@ -45,3 +45,41 @@ jobs:
 
       - name: Build
         run: make re
+
+  conventional-commit:
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        run: |
+          set -uo pipefail
+          PATTERN='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9._/-]+\))?(!)?: .+$'
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.event.after }}"
+          fi
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE="$(git rev-list --max-parents=0 HEAD)"
+          fi
+          FAILED=0
+          while read -r sha msg; do
+            case "$msg" in
+              Merge*|Revert*) continue ;;
+            esac
+            if ! printf '%s' "$msg" | grep -qE "$PATTERN"; then
+              echo "::error::non-conventional commit $sha: $msg"
+              FAILED=1
+            fi
+          done < <(git log --format=%H%x20%s "$BASE..$HEAD")
+          if [ "$FAILED" -ne 0 ]; then
+            echo "Expected: <type>(<scope>): <description> — e.g. feat(parser): handle chunked bodies"
+            exit 1
+          fi
