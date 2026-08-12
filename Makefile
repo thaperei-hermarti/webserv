@@ -7,7 +7,7 @@ endif
 
 SRC = $(SRC_FILES:%=$(SRC_DIR)/%)
 OBJ = $(SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
-HDR = $(wildcard $(INC_DIR)/*.hpp)
+HDR = $(shell find $(INC_DIR) -type f -name '*.hpp')
 
 all: $(NAME)
 
