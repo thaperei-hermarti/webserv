@@ -1,12 +1,17 @@
 NAME = webserv
 CC = c++
 CFLAGS = -Wall -Wextra -Werror -std=c++98
+TEST_CFLAGS = -Wall -Wextra -Werror -std=c++17
 
 SRC_DIR = src
 INC_DIR = inc
 OBJ_DIR = obj
+TEST_DIR = test
+TEST_NAME = unit_tests
 
 INCLUDES = -I./$(INC_DIR)
+GTEST_CFLAGS = $(shell sh scripts/gtest-flags.sh cflags)
+GTEST_LIBS = $(shell sh scripts/gtest-flags.sh libs)
 
 LIBS =
 
