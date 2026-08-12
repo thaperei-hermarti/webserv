@@ -7,6 +7,9 @@ endif
 
 SRC = $(SRC_FILES:%=$(SRC_DIR)/%)
 OBJ = $(SRC:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
+APP_OBJ = $(filter-out $(OBJ_DIR)/main.o,$(OBJ))
+TEST_SRCS = $(shell find $(TEST_DIR) -type f -name '*.cpp' | sort)
+TEST_OBJS = $(patsubst $(TEST_DIR)/%.cpp,$(OBJ_DIR)/test/%.o,$(TEST_SRCS))
 HDR = $(shell find $(INC_DIR) -type f -name '*.hpp')
 
 all: $(NAME)
@@ -15,9 +18,33 @@ $(NAME): $(OBJ)
 	$(CC) $(CFLAGS) $(OBJ) $(LIBS) -o $(NAME)
 	@echo "[OK] $(NAME) compiled successfully"
 
+test: $(TEST_NAME)
+
+test-run: $(TEST_NAME)
+	./$(TEST_NAME) --gtest_color=no
+
+test-run-valgrind: $(TEST_NAME)
+	@valgrind -q \
+		--leak-check=full \
+		--show-leak-kinds=all \
+		--track-origins=yes \
+		--track-fds=yes \
+		./$(TEST_NAME) --gtest_color=no
+
+check-deps:
+	@sh scripts/check-deps.sh
+
+$(TEST_NAME): check-deps $(TEST_OBJS) $(APP_OBJ)
+	$(CC) $(TEST_CFLAGS) $(GTEST_CFLAGS) $(INCLUDES) $(TEST_OBJS) $(APP_OBJ) $(GTEST_LIBS) -o $(TEST_NAME)
+	@echo "[OK] GoogleTest suite compiled successfully"
+
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(HDR)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/test/%.o: $(TEST_DIR)/%.cpp $(HDR)
+	@mkdir -p $(@D)
+	$(CC) $(TEST_CFLAGS) $(GTEST_CFLAGS) $(INCLUDES) -c $< -o $@
 
 valgrind-run:
 	@valgrind -q\
@@ -71,4 +98,4 @@ lint:
 	@clang-tidy $(SRC) -- $(CFLAGS) $(INCLUDES)
 	@echo "[OK] clang-tidy found no issues"
 
-.PHONY: all clean fclean re bonus setup check-tools format format-check lint
+.PHONY: all clean fclean re bonus setup check-tools format format-check lint test test-run test-run-valgrind check-deps
