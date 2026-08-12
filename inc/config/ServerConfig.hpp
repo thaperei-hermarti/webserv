@@ -1,0 +1,39 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   ServerConfig.hpp                                  :+:      :+:    :+:   */
+/*   By: hermarti <hermarti@student.42sp.org.br>    +#+  +:+       +#+        */
+/*   Created: 2026/08/12 17:34:55 by hermarti          #+#    #+#             */
+/*   Updated: 2026/08/12 17:38:43 by hermarti         ###   ########.fr       */
+/*   Created: 2026/07/31 17:34:55 by hermarti          #+#    #+#             */
+/*   Updated: 2026/07/31 17:38:43 by hermarti         ###   ########.fr       */
+/*                                                                            */
+
+#ifndef WEBSERV_CONFIG_SERVERCONFIG_HPP
+#define WEBSERV_CONFIG_SERVERCONFIG_HPP
+
+#include <cstddef>
+#include <map>
+#include <string>
+#include <vector>
+
+#include "config/LocationConfig.hpp"
+
+struct ServerConfig
+{
+	ServerConfig();
+	ServerConfig(const ServerConfig& other);
+	ServerConfig& operator=(const ServerConfig& other);
+
+	LocationConfig& matchLocation(const std::string& uri);
+	std::size_t getClientMaxBodySize() const;
+
+	std::string host_;
+	std::vector<int> ports_;
+	std::vector<std::string> server_names_;
+	std::map<int, std::string> error_pages_;
+	std::size_t client_max_body_size_;
+	std::vector<LocationConfig> locations_;
+};
+
+#endif

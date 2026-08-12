@@ -1,3 +1,4 @@
 obj/
 webserv
 compile_commands.json
+webserv_uml_class_diagram.md
