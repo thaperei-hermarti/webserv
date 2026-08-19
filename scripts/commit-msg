@@ -12,7 +12,7 @@ case "$SUBJECT" in
 	Revert*) exit 0 ;;  # git revert generates "Revert \"...\"" messages
 esac
 
-PATTERN='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9._/-]+\))?(!)?: .+$'
+PATTERN='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test|raw|wip)(\([a-z0-9._/-]+\))?(!)?: .+$'
 
 if ! printf '%s' "$SUBJECT" | grep -qE "$PATTERN"; then
 	echo ""
@@ -24,7 +24,7 @@ if ! printf '%s' "$SUBJECT" | grep -qE "$PATTERN"; then
 	echo "  fix(cgi): reap zombie children without blocking the loop"
 	echo "  chore: add commit-msg hook"
 	echo ""
-	echo "Types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test"
+	echo "Types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test, raw, wip"
 	echo "Breaking change: add ! before the colon (feat!: ...) or a BREAKING CHANGE footer."
 	echo ""
 	exit 1
