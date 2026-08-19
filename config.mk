@@ -23,6 +23,7 @@ SRC_FILES = \
 	parser/config/ConfigParser.cpp \
 	parser/request/HttpRequestParser.cpp \
 	config/ServerConfig.cpp \
+	config/FileConfig.cpp \
 	config/LocationConfig.cpp \
 	server/Server.cpp \
 	server/Reactor.cpp \
