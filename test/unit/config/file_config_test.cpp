@@ -13,108 +13,98 @@
 #include "config/FileConfig.hpp"
 
 #include <gtest/gtest.h>
-
-#include <sys/stat.h>
 #include <unistd.h>
-
 #include <cstdio>
 #include <fstream>
 #include <string>
 
 namespace
 {
-	class TempFile
+class TempFile
+{
+  private:
+	std::string _path;
+
+  public:
+	TempFile() : _path()
 	{
-		public:
-			TempFile(): _path()
+		char tmpl[] = "/tmp/webserv_file_config_XXXXXX";
+		int fd = mkstemp(tmpl);
+		if (fd != -1)
 		{
-			char tmpl[] = "/tmp/webserv_file_config_XXXXXX";
-			int fd = mkstemp(tmpl);
-			if (fd != -1)
-			{
-				_path = tmpl;
-				close(fd);
-			}
+			_path = tmpl;
+			close(fd);
 		}
+	}
 
-			~TempFile()
-			{
-				if (!_path.empty())
-				{
-					std::remove(_path.c_str());
-				}
-			}
+	~TempFile()
+	{
+		if (!_path.empty())
+		{
+			std::remove(_path.c_str());
+		}
+	}
 
-			bool writeContent(std::string const& content) const
-			{
-				std::ofstream out(_path.c_str(), std::ios::out | std::ios::trunc);
-				if (!out.is_open())
-				{
-					return false;
-				}
-				out << content;
-				return true;
-			}
+	bool writeContent(std::string const& content) const
+	{
+		std::ofstream out(_path.c_str(), std::ios::out | std::ios::trunc);
+		if (!out.is_open())
+		{
+			return false;
+		}
+		out << content;
+		return true;
+	}
 
-			bool makeUnreadable() const
-			{
-				return chmod(_path.c_str(), 0) == 0;
-			}
+	bool makeUnreadable() const
+	{
+		return chmod(_path.c_str(), 0) == 0;
+	}
 
-			std::string const& getPath() const
-			{
-				return _path;
-			}
+	std::string const& getPath() const
+	{
+		return _path;
+	}
+};
+} // namespace
 
-		private:
-			std::string _path;
-	};
-}
-
-TEST(FileConfigTest, IsFileExistsForExistingFile)
+TEST(FileConfigTest, GetPathReturnsConfiguredPath)
 {
 	TempFile file;
 
 	ASSERT_FALSE(file.getPath().empty());
 	FileConfig config(file.getPath());
-	EXPECT_TRUE(config.isFileExists());
+	EXPECT_EQ(file.getPath(), config.getPath());
 }
 
-TEST(FileConfigTest, IsFileExistsForMissingFile)
-{
-	FileConfig config("/tmp/webserv_file_config_missing_12345");
-	EXPECT_FALSE(config.isFileExists());
-}
-
-TEST(FileConfigTest, IsFileExistsForDefaultConstructed)
+TEST(FileConfigTest, DefaultPathIsEmpty)
 {
 	FileConfig config;
-	EXPECT_FALSE(config.isFileExists());
+	EXPECT_EQ("", config.getPath());
 }
 
-TEST(FileConfigTest, IsReadableForReadableFile)
+TEST(FileConfigTest, IsFileExistsAndReadableForExistingFile)
 {
 	TempFile file;
 
 	ASSERT_FALSE(file.getPath().empty());
-	FileConfig config(file.getPath());
-	EXPECT_TRUE(config.isReadable());
+	EXPECT_TRUE(FileConfig::isFileExistsAndReadable(file.getPath(), ""));
 }
 
-TEST(FileConfigTest, IsReadableForMissingFile)
+TEST(FileConfigTest, IsFileExistsAndReadableForMissingFile)
 {
-	FileConfig config("/tmp/webserv_file_config_missing_12345");
-	EXPECT_FALSE(config.isReadable());
+	EXPECT_FALSE(FileConfig::isFileExistsAndReadable(
+		"/tmp/webserv_file_config_missing_12345", ""));
 }
 
-TEST(FileConfigTest, IsReadableForUnreadableFile)
+TEST(FileConfigTest, IsFileExistsAndReadableUsesIndex)
 {
 	TempFile file;
 
 	ASSERT_FALSE(file.getPath().empty());
-	ASSERT_TRUE(file.makeUnreadable());
-	FileConfig config(file.getPath());
-	EXPECT_FALSE(config.isReadable());
+	std::string const filename =
+		file.getPath().substr(file.getPath().find_last_of('/') + 1);
+	EXPECT_TRUE(FileConfig::isFileExistsAndReadable("/tmp/", filename));
 }
 
 TEST(FileConfigTest, ReadFileReturnsContent)
