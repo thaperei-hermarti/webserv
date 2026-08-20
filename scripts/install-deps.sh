@@ -19,12 +19,19 @@ JOBS=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)
 tool_missing()
 {
 	local tool="$1"
-	if ! command -v "$tool" >/dev/null 2>&1; then
-		echo "[INFO] $tool not found, scheduling installation"
-		MISSING+=("$tool")
-		return 0
+	local bin
+	if command -v "$tool" >/dev/null 2>&1; then
+		return 1
 	fi
-	return 1
+	for bin in "$HOME/.local/bin/$tool" "$HOME/bin/$tool"; do
+		if [ -x "$bin" ]; then
+			echo "[INFO] $tool found at $bin (not in PATH)"
+			return 1
+		fi
+	done
+	echo "[INFO] $tool not found, scheduling installation"
+	MISSING+=("$tool")
+	return 0
 }
 
 tool_missing clang-format || true
@@ -179,7 +186,20 @@ install_pip()
 	done
 	if [ -n "${pkgs[*]}" ]; then
 		echo "[INFO] Installing with pip (user-level): ${pkgs[*]}"
+		set +e
 		"$pip" install --user "${pkgs[@]}"
+		set -e
+		local fail=0
+		local t2
+		for t2 in "${pkgs[@]}"; do
+			if ! command -v "$t2" >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/$t2" ]; then
+				echo "[ERROR] pip install failed: $t2 is not available."
+				fail=1
+			fi
+		done
+		if [ "$fail" -eq 1 ]; then
+			exit 1
+		fi
 		installed=1
 	fi
 	if [ "$NEED_GTEST" -eq 1 ]; then

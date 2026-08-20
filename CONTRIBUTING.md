@@ -4,8 +4,7 @@ Thanks for your interest in contributing! This document explains how to set up t
 
 ## Getting started
 
-1. Fork the repository and clone your fork.
-2. Run `make setup` — it checks for, and installs, missing dependencies (clang-format, clang-tidy, valgrind, GoogleTest) and then installs the git hooks (`pre-commit`, `commit-msg`).
+Run `make setup` once after cloning. It checks for missing dependencies, installs whatever is needed, and then installs the git hooks (`pre-commit`, `commit-msg`):
 
 ```sh
 git clone git@github.com:<you>/webserv.git
@@ -13,7 +12,35 @@ cd webserv
 make setup
 ```
 
-No sudo required: dependency installation prefers a user-level install (brew, then pip + a local GoogleTest build) and only falls back to apt when sudo or root is available.
+### Dependencies
+
+| Dependency      | Used for                              | Install
+|-----------------|---------------------------------------|-------------------
+| C++ compiler    | building the server (`-std=c++98`)    | system (clang/g++)
+| clang-format    | `make format` / `format-check`        | auto-installed
+| clang-tidy      | `make lint`                           | auto-installed
+| GoogleTest      | `make test-run` (unit tests)          | auto-installed
+| valgrind        | `make test-run-valgrind`              | auto-installed
+| cmake, git      | building GoogleTest from source       | system
+
+Missing tools are installed automatically — no sudo required. The installer tries, in order:
+
+1. **brew** (user-level, no sudo; also searched outside PATH, e.g. `~/.brew`, `/goinfre/brew`)
+2. **apt + sudo** (only if sudo actually works)
+3. **pip --user** (clang-format/clang-tidy wheels) + GoogleTest built from source into `~/.local`
+
+If pip was used, add `~/.local/bin` to your `PATH` (the installer checks it even when absent from PATH):
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+If GoogleTest was built into `~/.local`, export its flags in your shell profile:
+
+```sh
+export GTEST_CFLAGS=-I$HOME/.local/include
+export GTEST_LIBS=-L$HOME/.local/lib -lgtest_main -lgtest
+```
 
 The hooks are mandatory: they enforce formatting, linting, a clean build, and commit message conventions on every commit. `make check-tools` will tell you if anything is missing.
 
