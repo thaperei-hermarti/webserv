@@ -12,30 +12,66 @@
 
 #include "config/FileConfig.hpp"
 
-FileConfig::FileConfig() { }
+FileConfig::FileConfig()
+{
+}
 
-FileConfig::FileConfig(std::string const path): _path(path) { }
+FileConfig::FileConfig(std::string const path) : _path(path)
+{
+}
 
-FileConfig::~FileConfig() { }
+FileConfig::~FileConfig()
+{
+}
 
-std::string FileConfig::getPath() const { return _path; }
+std::string FileConfig::getPath() const
+{
+	return _path;
+}
 
 std::string FileConfig::readFile()
 {
-	std::ifstream file(_path.c_str());
-	std::stringstream buffer;
-
-	if (!file.is_open())
+	if (_path.empty() || _path.length() == 0)
 		return std::string();
+	std::ifstream file(_path.c_str());
+	if (!file || !file.is_open())
+		return std::string();
+
+	std::stringstream buffer;
 	buffer << file.rdbuf();
 	return buffer.str();
 }
 
-bool FileConfig::isReadable() const { return access(_path.c_str(), R_OK) == 0; }
-
-bool FileConfig::isFileExists() const
+int FileConfig::getTypePath(std::string const path)
 {
 	struct stat st;
+	int result;
 
-	return stat(_path.c_str(), &st) == 0;
+	result = stat(path.c_str(), &st);
+	if (result == 0)
+	{
+		if (st.st_mode & S_IFREG)
+			return 1;
+		else if (st.st_mode & S_IFDIR)
+			return 2;
+		else
+			return 3;
+	}
+	return -1;
+}
+
+int FileConfig::checkFileAccess(std::string const path, int mode)
+{
+	return access(path.c_str(), mode);
+}
+
+int FileConfig::isFileExistsAndReadable(std::string const path,
+										std::string const index)
+{
+	if (getTypePath(path) == 1 && checkFileAccess(path, R_OK) == 0)
+		return 1;
+	else if (getTypePath(path + index) == 1 &&
+			 checkFileAccess(path + index, R_OK) == 0)
+		return 1;
+	return 0;
 }

@@ -30,8 +30,10 @@ class FileConfig
 
 	std::string getPath() const;
 	std::string readFile();
-	bool isReadable() const;
-	bool isFileExists() const;
+	static int checkFileAccess(std::string const path, int mode);
+	static int isFileExistsAndReadable(std::string const path,
+									   std::string const index);
+	static int getTypePath(std::string const path);
 };
 
 #endif
