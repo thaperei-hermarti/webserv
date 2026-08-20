@@ -5,14 +5,15 @@ Thanks for your interest in contributing! This document explains how to set up t
 ## Getting started
 
 1. Fork the repository and clone your fork.
-2. Install the dependencies (clang-format, clang-tidy, and a C++ compiler).
-3. Run `make setup` to install the git hooks (`pre-commit`, `commit-msg`).
+2. Run `make setup` — it checks for, and installs, missing dependencies (clang-format, clang-tidy, valgrind, GoogleTest) and then installs the git hooks (`pre-commit`, `commit-msg`).
 
 ```sh
 git clone git@github.com:<you>/webserv.git
 cd webserv
 make setup
 ```
+
+No sudo required: dependency installation prefers a user-level install (brew, then pip + a local GoogleTest build) and only falls back to apt when sudo or root is available.
 
 The hooks are mandatory: they enforce formatting, linting, a clean build, and commit message conventions on every commit. `make check-tools` will tell you if anything is missing.
 
