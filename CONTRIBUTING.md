@@ -4,15 +4,38 @@ Thanks for your interest in contributing! This document explains how to set up t
 
 ## Getting started
 
-1. Fork the repository and clone your fork.
-2. Install the dependencies (clang-format, clang-tidy, and a C++ compiler).
-3. Run `make setup` to install the git hooks (`pre-commit`, `commit-msg`).
+Run `make setup` once after cloning. It checks for missing dependencies, installs whatever is needed, and then installs the git hooks (`pre-commit`, `commit-msg`):
 
 ```sh
 git clone git@github.com:<you>/webserv.git
 cd webserv
 make setup
 ```
+
+### Dependencies
+
+| Dependency      | Used for                              | Install
+|-----------------|---------------------------------------|-------------------
+| C++ compiler    | building the server (`-std=c++98`)    | system (clang/g++)
+| clang-format    | `make format` / `format-check`        | auto-installed
+| clang-tidy      | `make lint`                           | auto-installed
+| GoogleTest      | `make test-run` (unit tests)          | auto-installed
+| valgrind        | `make test-run-valgrind`              | auto-installed
+| cmake, git      | building GoogleTest from source       | system
+
+Missing tools are installed automatically — no sudo required. The installer tries, in order:
+
+1. **brew** (user-level, no sudo; also searched outside PATH, e.g. `~/.brew`, `/goinfre/brew`)
+2. **apt + sudo** (only if sudo actually works)
+3. **pip --user** (clang-format/clang-tidy wheels) + GoogleTest built from source into `~/.local`
+
+If pip was used, add `~/.local/bin` to your `PATH` (the installer checks it even when absent from PATH):
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+A GoogleTest built into `~/.local` is auto-detected by the build (no extra setup).
 
 The hooks are mandatory: they enforce formatting, linting, a clean build, and commit message conventions on every commit. `make check-tools` will tell you if anything is missing.
 
