@@ -41,6 +41,31 @@ if [ "${#MISSING[@]}" -eq 0 ] && [ "$NEED_GTEST" -eq 0 ]; then
 	exit 0
 fi
 
+find_brew()
+{
+	if command -v brew >/dev/null 2>&1; then
+		return 0
+	fi
+	local cand dir
+	for cand in "$HOME/.brew/bin/brew" /opt/homebrew/bin/brew /usr/local/bin/brew \
+		/goinfre/brew/bin/brew /goinfre/homebrew/bin/brew /sgoinfre/goinfre/brew/bin/brew; do
+		if [ -x "$cand" ]; then
+			dir=$(dirname "$cand")
+			echo "[INFO] Found brew at $cand, adding it to PATH"
+			export PATH="$dir:$PATH"
+			return 0
+		fi
+	done
+	return 1
+}
+
+can_sudo()
+{
+	[ "$(id -u)" -eq 0 ] && return 0
+	command -v sudo >/dev/null 2>&1 || return 1
+	sudo -v >/dev/null 2>&1
+}
+
 apt_cmd()
 {
 	if [ "$(id -u)" -eq 0 ]; then
@@ -69,7 +94,11 @@ build_apt_gtest()
 	build_dir=$(mktemp -d)
 	trap 'rm -rf "$build_dir"' EXIT
 	cmake -S "$src" -B "$build_dir" -DBUILD_GMOCK=OFF -DCMAKE_INSTALL_PREFIX=/usr/local
-	sudo cmake --build "$build_dir" --target install -- -j"$JOBS"
+	if [ "$(id -u)" -eq 0 ]; then
+		cmake --build "$build_dir" --target install -- -j"$JOBS"
+	else
+		sudo cmake --build "$build_dir" --target install -- -j"$JOBS"
+	fi
 }
 
 install_apt()
@@ -161,9 +190,6 @@ install_pip()
 		echo "[ERROR] None of the missing tools can be installed via pip."
 		exit 1
 	fi
-	if [ "$NEED_GTEST" -eq 1 ]; then
-		build_gtest_local
-	fi
 	echo "[INFO] Ensure $HOME/.local/bin is in your PATH"
 	if [ "$NEED_GTEST" -eq 1 ]; then
 		echo "[INFO] Add these to your shell profile so the Makefile finds GoogleTest:"
@@ -172,9 +198,9 @@ install_pip()
 	fi
 }
 
-if command -v brew >/dev/null 2>&1; then
+if find_brew; then
 	install_brew
-elif command -v apt-get >/dev/null 2>&1 && { [ "$(id -u)" -eq 0 ] || command -v sudo >/dev/null 2>&1; }; then
+elif command -v apt-get >/dev/null 2>&1 && can_sudo; then
 	install_apt
 elif command -v pip3 >/dev/null 2>&1 || command -v pip >/dev/null 2>&1; then
 	install_pip
