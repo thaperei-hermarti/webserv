@@ -21,6 +21,13 @@ elif command -v brew >/dev/null 2>&1; then
 	fi
 fi
 
+if [ -z "$pkg_cflags" ] && [ -z "$pkg_libs" ] \
+	&& [ -f "$HOME/.local/include/gtest/gtest.h" ] \
+	&& [ -f "$HOME/.local/lib/libgtest.a" ]; then
+	pkg_cflags="-I$HOME/.local/include"
+	pkg_libs="-L$HOME/.local/lib -lgtest_main -lgtest -lpthread"
+fi
+
 if [ -z "$pkg_cflags" ] && [ -z "$pkg_libs" ]; then
 	pkg_cflags=${GTEST_CFLAGS:--DGTEST_HAS_PTHREAD=1}
 	pkg_libs=${GTEST_LIBS:--lgtest_main -lgtest}

@@ -97,9 +97,8 @@ build_apt_gtest()
 		echo "[INFO] Installing cmake to build GoogleTest"
 		apt_cmd install -y cmake
 	fi
-	local build_dir
 	build_dir=$(mktemp -d)
-	trap 'rm -rf "$build_dir"' EXIT
+	trap 'if [ -n "${build_dir:-}" ]; then rm -rf "$build_dir"; fi' EXIT
 	cmake -S "$src" -B "$build_dir" -DBUILD_GMOCK=OFF -DCMAKE_INSTALL_PREFIX=/usr/local
 	if [ "$(id -u)" -eq 0 ]; then
 		cmake --build "$build_dir" --target install -- -j"$JOBS"
@@ -143,7 +142,6 @@ install_brew()
 build_gtest_local()
 {
 	local prefix="$HOME/.local"
-	local build_dir
 	if [ -f "$prefix/lib/libgtest.a" ] && [ -f "$prefix/include/gtest/gtest.h" ]; then
 		return 0
 	fi
@@ -156,7 +154,7 @@ build_gtest_local()
 		exit 1
 	fi
 	build_dir=$(mktemp -d)
-	trap 'rm -rf "$build_dir"' EXIT
+	trap 'if [ -n "${build_dir:-}" ]; then rm -rf "$build_dir"; fi' EXIT
 	echo "[INFO] Building GoogleTest from source into $prefix"
 	git clone --depth 1 https://github.com/google/googletest.git "$build_dir/googletest"
 	cmake -S "$build_dir/googletest" -B "$build_dir/build" -DBUILD_GMOCK=OFF -DCMAKE_INSTALL_PREFIX="$prefix"
@@ -212,9 +210,7 @@ install_pip()
 	fi
 	echo "[INFO] Ensure $HOME/.local/bin is in your PATH"
 	if [ "$NEED_GTEST" -eq 1 ]; then
-		echo "[INFO] Add these to your shell profile so the Makefile finds GoogleTest:"
-		echo "export GTEST_CFLAGS=-I$HOME/.local/include"
-		echo "export GTEST_LIBS=-L$HOME/.local/lib -lgtest_main -lgtest"
+		echo "[INFO] GoogleTest detected in $HOME/.local (auto-detected by the Makefile)"
 	fi
 }
 

@@ -35,12 +35,7 @@ If pip was used, add `~/.local/bin` to your `PATH` (the installer checks it even
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-If GoogleTest was built into `~/.local`, export its flags in your shell profile:
-
-```sh
-export GTEST_CFLAGS=-I$HOME/.local/include
-export GTEST_LIBS=-L$HOME/.local/lib -lgtest_main -lgtest
-```
+A GoogleTest built into `~/.local` is auto-detected by the build (no extra setup).
 
 The hooks are mandatory: they enforce formatting, linting, a clean build, and commit message conventions on every commit. `make check-tools` will tell you if anything is missing.
 
