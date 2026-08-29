@@ -20,6 +20,7 @@ SRC_FILES = \
 	http/request/HttpRequest.cpp \
 	http/response/HttpResponse.cpp \
 	http/response/ResponseBuilder.cpp \
+	lexer/Lexer.cpp \
 	parser/config/ConfigParser.cpp \
 	parser/request/HttpRequestParser.cpp \
 	config/ServerConfig.cpp \
