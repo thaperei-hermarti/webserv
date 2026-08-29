@@ -100,8 +100,6 @@ ALLOWED_CHAR = ? any character except whitespaces, ';', '{', '}' ?;
 
 ## Business rules
 
-- Each server_block should have exactly one listen
-- Multiple server_name are accepeted inside the same server_block
 - In listen directive, only hostname or ipv4 are accepted for the interface (each octet must be between 0-255)
 - client_max_body_size must be in megabytes (mandatory m suffix)
 - Empty values are not accepted
@@ -111,6 +109,10 @@ ALLOWED_CHAR = ? any character except whitespaces, ';', '{', '}' ?;
 - Port numbers must be between 1-65535
 - Duplicate root must return error
 - Status code must have 3 digits and between 100-511
+- listen is localhost:80 by default
+- if error_page is absent, the server serves a generic error page at internal path of webserv
+- index is index.html by default
+- method directive is GET, POST and DELETE by default
 - Return has 302 code by default
 - Return accept both local path and absolute URL as a destination (external redirect)
 - Paths must not have spaces
@@ -121,10 +123,11 @@ ALLOWED_CHAR = ? any character except whitespaces, ';', '{', '}' ?;
 
 | Directive                | Allowed Cardinality                       | If violated                                         |
 |--------------------------|-------------------------------------------|-----------------------------------------------------|
-| `listen`                 | exactly 1 per server                      | error                                               |
-| `server_name`             | 1 or more                                | accumulate (list)                                     |
-| `root`                     | 0 or 1 per block                        | error if duplicated                                 |
-| `index`                     | 0 or 1 (with multiple filenames)       | error if duplicated                              |
+| `listen`                 | 0 or 1 per server                      | error                                               |
+| `server_name`            | 0 or 1 per server (with multiple server_name on the same line)      | error if duplicated   |
+| `root` (server)          | exactly 1 per server               | error if duplicated or absent  |
+| `root` (location)        | 0 or 1 per block                    | error if duplicated; location heritage from server if absent |
+| `index`                     | 0 or 1 (with multiple filenames on the same line)       | error if duplicated                 |
 | `client_max_body_size`       | 0 or 1                                    | error if duplicated                             |
 | `error_page`                   | 0 or more                                 | accumulate (each occurrence maps code -> path)   |
 | `method`                         | 0 or 1 per location (with multiple methods) | error if duplicated                             |
@@ -135,5 +138,4 @@ ALLOWED_CHAR = ? any character except whitespaces, ';', '{', '}' ?;
 
 ### Mandatory directives
 
-**Per server block**: listen, server_name, root.
-**Per location block**: method.
+**Per server block**: root.
