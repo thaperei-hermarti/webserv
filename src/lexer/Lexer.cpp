@@ -1,5 +1,4 @@
 #include "lexer/Lexer.hpp"
-#include <cctype>
 
 std::string tokenTypeToString(t_token type)
 {
@@ -26,6 +25,15 @@ std::string tokenTypeToString(t_token type)
 		default:
 			return "UNKNOWN";
 	}
+}
+
+std::string Lexer::errorMessage(char ch, int line, int column)
+{
+	std::string value(1, ch);
+	if (ch == '\0')
+		value = "\0";
+	return "Unexpected character '" + value + "' at line " + toString(line) +
+		   ", column " + toString(column);
 }
 
 Lexer::Lexer() : _input(), _tokenIndex(0), _pos(0), _line(1), _column(1)
@@ -235,7 +243,7 @@ void Lexer::tokenize()
 			tokenizeWord();
 			continue;
 		}
-		advanceChar();
+		throw std::runtime_error(errorMessage(ch, _line, _column));
 	}
 	addToken(EOF_TOKEN, "", _line, _column);
 }
@@ -247,7 +255,7 @@ const std::vector<t_lexer_token>& Lexer::getTokens() const
 
 const t_lexer_token& Lexer::peek() const
 {
-	static const t_lexer_token eofToken = {EOF_TOKEN, "", 0, 0};
+	static const t_lexer_token eofToken = {"", EOF_TOKEN, 0, 0};
 	if (_tokenIndex < _tokens.size())
 		return _tokens[_tokenIndex];
 	return eofToken;
@@ -255,7 +263,7 @@ const t_lexer_token& Lexer::peek() const
 
 const t_lexer_token& Lexer::advance()
 {
-	static const t_lexer_token eofToken = {EOF_TOKEN, "", 0, 0};
+	static const t_lexer_token eofToken = {"", EOF_TOKEN, 0, 0};
 	if (_tokenIndex < _tokens.size())
 	{
 		const t_lexer_token& token = _tokens[_tokenIndex++];
@@ -266,7 +274,7 @@ const t_lexer_token& Lexer::advance()
 
 const t_lexer_token& Lexer::expect(t_token type)
 {
-	static const t_lexer_token eofToken = {EOF_TOKEN, "", 0, 0};
+	static const t_lexer_token eofToken = {"", EOF_TOKEN, 0, 0};
 	if (_tokenIndex < _tokens.size() && _tokens[_tokenIndex].type == type)
 		return _tokens[_tokenIndex++];
 	return eofToken;

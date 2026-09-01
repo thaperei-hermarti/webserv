@@ -4,10 +4,13 @@
 #include <algorithm>
 #include <ostream>
 #include <vector>
+#include <cctype>
+#include <string>
+#include <sstream>
 
 typedef enum e_token
 {
-	WORD = 0,
+	WORD,
 	NUMBER, // sequence of digits
 	PATH,	// "/" followed by ALLOWED_CHAR*
 	URL,	// scheme "://" + rest
@@ -20,8 +23,8 @@ typedef enum e_token
 
 typedef struct s_token
 {
-	t_token type;
 	std::string value;
+	t_token type;
 	int line;
 	int column;
 } t_lexer_token;
@@ -54,6 +57,8 @@ class Lexer
 	Lexer(const std::string& input);
 	virtual ~Lexer();
 
+	static std::string errorMessage(char ch, int line, int column);
+
 	void tokenize();
 	const std::vector<t_lexer_token>& getTokens() const;
 	const t_lexer_token& peek() const;
@@ -61,6 +66,13 @@ class Lexer
 	const t_lexer_token& expect(t_token type);
 };
 #endif
+
+template <typename T> std::string toString(const T& value)
+{
+	std::ostringstream oss;
+	oss << value;
+	return oss.str();
+}
 
 std::ostream& operator<<(std::ostream& out, const t_lexer_token& token);
 std::ostream& operator<<(std::ostream& out, const Lexer& lexer);
