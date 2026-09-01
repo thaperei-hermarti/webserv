@@ -116,9 +116,9 @@ ALLOWED_CHAR = ? any character except whitespaces, ';', '{', '}' ?;
 - Return has 302 code by default
 - Return accept both local path and absolute URL as a destination (external redirect)
 - Paths must not have spaces
-- Paths with ".." must be removed before split into script-path
 - Keywords are case-sensitive
 - Comments (#) are ignores by lexer
+- Path segments equal to ".." are not allowed anywhere in a PATH (directory traversal prevention)
 
 ### Cardinality and politics of duplicates by directive
 
