@@ -89,3 +89,9 @@ TEST(LexerTest, IgnoresCommentsAndWhitespace)
 	EXPECT_EQ(CBRACE, tokens[5].type);
 	EXPECT_EQ(EOF_TOKEN, tokens.back().type);
 }
+
+TEST(LexerTest, ProducesDetailedCharacterErrorMessage)
+{
+	EXPECT_EQ("Unexpected character '@' at line 2, column 4",
+			  Lexer::errorMessage('@', 2, 4));
+}
