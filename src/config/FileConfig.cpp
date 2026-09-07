@@ -16,7 +16,7 @@ FileConfig::FileConfig()
 {
 }
 
-FileConfig::FileConfig(std::string const path) : _path(path)
+FileConfig::FileConfig(std::string const path) : path_(path)
 {
 }
 
@@ -26,14 +26,14 @@ FileConfig::~FileConfig()
 
 std::string FileConfig::getPath() const
 {
-	return _path;
+	return path_;
 }
 
 std::string FileConfig::readFile()
 {
-	if (_path.empty() || _path.length() == 0)
+	if (path_.empty() || path_.length() == 0)
 		return std::string();
-	std::ifstream file(_path.c_str());
+	std::ifstream file(path_.c_str());
 	if (!file || !file.is_open())
 		return std::string();
 

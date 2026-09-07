@@ -21,7 +21,7 @@
 
 class FileConfig
 {
-	std::string _path;
+	std::string path_;
 
   public:
 	FileConfig();

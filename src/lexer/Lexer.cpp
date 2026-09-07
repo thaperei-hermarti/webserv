@@ -36,12 +36,12 @@ std::string Lexer::errorMessage(char ch, int line, int column)
 		   ", column " + toString(column);
 }
 
-Lexer::Lexer() : _input(), _tokenIndex(0), _pos(0), _line(1), _column(1)
+Lexer::Lexer() : input_(), tokenIndex_(0), pos_(0), line_(1), column_(1)
 {
 }
 
 Lexer::Lexer(const std::string& input)
-	: _input(input), _tokenIndex(0), _pos(0), _line(1), _column(1)
+	: input_(input), tokenIndex_(0), pos_(0), line_(1), column_(1)
 {
 }
 
@@ -51,17 +51,17 @@ Lexer::~Lexer()
 
 char Lexer::currentChar() const
 {
-	if (static_cast<std::size_t>(_pos) >= _input.size())
+	if (static_cast<std::size_t>(pos_) >= input_.size())
 		return '\0';
-	return _input[_pos];
+	return input_[pos_];
 }
 
 char Lexer::peekChar() const
 {
-	std::size_t nextPos = static_cast<std::size_t>(_pos) + 1;
-	if (nextPos >= _input.size())
+	std::size_t nextPos = static_cast<std::size_t>(pos_) + 1;
+	if (nextPos >= input_.size())
 		return '\0';
-	return _input[nextPos];
+	return input_[nextPos];
 }
 
 void Lexer::advanceChar()
@@ -70,12 +70,12 @@ void Lexer::advanceChar()
 		return;
 	if (currentChar() == '\n')
 	{
-		_line++;
-		_column = 1;
+		line_++;
+		column_ = 1;
 	}
 	else
-		_column++;
-	_pos++;
+		column_++;
+	pos_++;
 }
 
 void Lexer::addToken(t_token type,
@@ -88,7 +88,7 @@ void Lexer::addToken(t_token type,
 	token.value = value;
 	token.line = line;
 	token.column = column;
-	_tokens.push_back(token);
+	tokens_.push_back(token);
 }
 
 void Lexer::removeComments()
@@ -101,25 +101,25 @@ void Lexer::removeComments()
 
 void Lexer::tokenizeWord()
 {
-	std::size_t startPos = static_cast<std::size_t>(_pos);
-	int startLine = _line;
-	int startColumn = _column;
+	std::size_t startPos = static_cast<std::size_t>(pos_);
+	int startLine = line_;
+	int startColumn = column_;
 	std::size_t schemePos = startPos;
 
-	while (schemePos < _input.size() &&
-		   std::isalpha(static_cast<unsigned char>(_input[schemePos])) != 0)
+	while (schemePos < input_.size() &&
+		   std::isalpha(static_cast<unsigned char>(input_[schemePos])) != 0)
 		schemePos++;
-	if (schemePos + 2 < _input.size() && _input[schemePos] == ':' &&
-		_input[schemePos + 1] == '/' && _input[schemePos + 2] == '/')
+	if (schemePos + 2 < input_.size() && input_[schemePos] == ':' &&
+		input_[schemePos + 1] == '/' && input_[schemePos + 2] == '/')
 	{
 		std::size_t endPos = schemePos + 3;
-		while (endPos < _input.size() &&
-			   !std::isspace(static_cast<unsigned char>(_input[endPos])) &&
-			   _input[endPos] != ';' && _input[endPos] != '{' &&
-			   _input[endPos] != '}')
+		while (endPos < input_.size() &&
+			   !std::isspace(static_cast<unsigned char>(input_[endPos])) &&
+			   input_[endPos] != ';' && input_[endPos] != '{' &&
+			   input_[endPos] != '}')
 			endPos++;
-		std::string value = _input.substr(startPos, endPos - startPos);
-		while (static_cast<std::size_t>(_pos) < endPos)
+		std::string value = input_.substr(startPos, endPos - startPos);
+		while (static_cast<std::size_t>(pos_) < endPos)
 			advanceChar();
 		addToken(URL, value, startLine, startColumn);
 		return;
@@ -134,61 +134,61 @@ void Lexer::tokenizeWord()
 		advanceChar();
 	}
 	std::string value =
-		_input.substr(startPos, static_cast<std::size_t>(_pos) - startPos);
+		input_.substr(startPos, static_cast<std::size_t>(pos_) - startPos);
 	addToken(WORD, value, startLine, startColumn);
 }
 
 void Lexer::tokenizeNumber()
 {
-	std::size_t startPos = static_cast<std::size_t>(_pos);
-	int startLine = _line;
-	int startColumn = _column;
+	std::size_t startPos = static_cast<std::size_t>(pos_);
+	int startLine = line_;
+	int startColumn = column_;
 
 	while (currentChar() != '\0' &&
 		   std::isdigit(static_cast<unsigned char>(currentChar())) != 0)
 		advanceChar();
 	std::string value =
-		_input.substr(startPos, static_cast<std::size_t>(_pos) - startPos);
+		input_.substr(startPos, static_cast<std::size_t>(pos_) - startPos);
 	addToken(NUMBER, value, startLine, startColumn);
 }
 
 void Lexer::tokenizePath()
 {
-	std::size_t startPos = static_cast<std::size_t>(_pos);
-	int startLine = _line;
-	int startColumn = _column;
+	std::size_t startPos = static_cast<std::size_t>(pos_);
+	int startLine = line_;
+	int startColumn = column_;
 
 	while (currentChar() != '\0' &&
 		   !std::isspace(static_cast<unsigned char>(currentChar())) &&
 		   currentChar() != ';' && currentChar() != '{' && currentChar() != '}')
 		advanceChar();
 	std::string value =
-		_input.substr(startPos, static_cast<std::size_t>(_pos) - startPos);
+		input_.substr(startPos, static_cast<std::size_t>(pos_) - startPos);
 	addToken(PATH, value, startLine, startColumn);
 }
 
 void Lexer::tokenizeUrl()
 {
-	std::size_t startPos = static_cast<std::size_t>(_pos);
-	int startLine = _line;
-	int startColumn = _column;
+	std::size_t startPos = static_cast<std::size_t>(pos_);
+	int startLine = line_;
+	int startColumn = column_;
 
 	while (currentChar() != '\0' &&
 		   !std::isspace(static_cast<unsigned char>(currentChar())) &&
 		   currentChar() != ';' && currentChar() != '{' && currentChar() != '}')
 		advanceChar();
 	std::string value =
-		_input.substr(startPos, static_cast<std::size_t>(_pos) - startPos);
+		input_.substr(startPos, static_cast<std::size_t>(pos_) - startPos);
 	addToken(URL, value, startLine, startColumn);
 }
 
 void Lexer::tokenize()
 {
-	_tokens.clear();
-	_pos = 0;
-	_line = 1;
-	_column = 1;
-	_tokenIndex = 0;
+	tokens_.clear();
+	pos_ = 0;
+	line_ = 1;
+	column_ = 1;
+	tokenIndex_ = 0;
 
 	while (currentChar() != '\0')
 	{
@@ -205,25 +205,25 @@ void Lexer::tokenize()
 		}
 		if (ch == '{')
 		{
-			addToken(BRACE, std::string(1, ch), _line, _column);
+			addToken(BRACE, std::string(1, ch), line_, column_);
 			advanceChar();
 			continue;
 		}
 		if (ch == '}')
 		{
-			addToken(CBRACE, std::string(1, ch), _line, _column);
+			addToken(CBRACE, std::string(1, ch), line_, column_);
 			advanceChar();
 			continue;
 		}
 		if (ch == ';')
 		{
-			addToken(SEMICOLON, std::string(1, ch), _line, _column);
+			addToken(SEMICOLON, std::string(1, ch), line_, column_);
 			advanceChar();
 			continue;
 		}
 		if (ch == ':')
 		{
-			addToken(COLON, std::string(1, ch), _line, _column);
+			addToken(COLON, std::string(1, ch), line_, column_);
 			advanceChar();
 			continue;
 		}
@@ -243,40 +243,32 @@ void Lexer::tokenize()
 			tokenizeWord();
 			continue;
 		}
-		throw std::runtime_error(errorMessage(ch, _line, _column));
+		throw std::runtime_error(errorMessage(ch, line_, column_));
 	}
-	addToken(EOF_TOKEN, "", _line, _column);
+	addToken(EOF_TOKEN, "", line_, column_);
 }
 
 const std::vector<t_lexer_token>& Lexer::getTokens() const
 {
-	return _tokens;
+	return tokens_;
 }
 
 const t_lexer_token& Lexer::peek() const
 {
 	static const t_lexer_token eofToken = {"", EOF_TOKEN, 0, 0};
-	if (_tokenIndex < _tokens.size())
-		return _tokens[_tokenIndex];
+	if (tokenIndex_ < tokens_.size())
+		return tokens_[tokenIndex_];
 	return eofToken;
 }
 
 const t_lexer_token& Lexer::advance()
 {
 	static const t_lexer_token eofToken = {"", EOF_TOKEN, 0, 0};
-	if (_tokenIndex < _tokens.size())
+	if (tokenIndex_ < tokens_.size())
 	{
-		const t_lexer_token& token = _tokens[_tokenIndex++];
+		const t_lexer_token& token = tokens_[tokenIndex_++];
 		return token;
 	}
-	return eofToken;
-}
-
-const t_lexer_token& Lexer::expect(t_token type)
-{
-	static const t_lexer_token eofToken = {"", EOF_TOKEN, 0, 0};
-	if (_tokenIndex < _tokens.size() && _tokens[_tokenIndex].type == type)
-		return _tokens[_tokenIndex++];
 	return eofToken;
 }
 

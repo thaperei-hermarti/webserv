@@ -34,13 +34,13 @@ std::string tokenTypeToString(t_token type);
 class Lexer
 {
   private:
-	std::vector<t_lexer_token> _tokens;
-	std::string _input;
-	std::size_t _tokenIndex;
+	std::vector<t_lexer_token> tokens_;
+	std::string input_;
+	std::size_t tokenIndex_;
 
-	int _pos;
-	int _line;
-	int _column;
+	int pos_;
+	int line_;
+	int column_;
 
 	char currentChar() const;
 	char peekChar() const;
@@ -63,9 +63,7 @@ class Lexer
 	const std::vector<t_lexer_token>& getTokens() const;
 	const t_lexer_token& peek() const;
 	const t_lexer_token& advance();
-	const t_lexer_token& expect(t_token type);
 };
-#endif
 
 template <typename T> std::string toString(const T& value)
 {
@@ -76,3 +74,5 @@ template <typename T> std::string toString(const T& value)
 
 std::ostream& operator<<(std::ostream& out, const t_lexer_token& token);
 std::ostream& operator<<(std::ostream& out, const Lexer& lexer);
+
+#endif
