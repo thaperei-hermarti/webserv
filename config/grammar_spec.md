@@ -28,7 +28,7 @@ server_directive = listen_directive
                   | client_max_body_size_directive
                   | error_page_directive;
 
-location_block = "location", PATH, "{", { location_directive }, "}";
+location_block = "location", URL_PATH, "{", { location_directive }, "}";
 
 location_directive = method_directive
                     | autoindex_directive
@@ -94,7 +94,9 @@ DIGIT = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
 
 TERMINATOR = ";";
 
-PATH = "/", { ALLOWED_CHAR };
+PATH = ( "/" | LETTER ), { ALLOWED_CHAR };
+
+URL_PATH = "/", { ALLOWED_CHAR };
 
 ALLOWED_CHAR = ? any character except whitespaces, ';', '{', '}' ?;
 
