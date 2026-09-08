@@ -400,7 +400,7 @@ void ConfigParser::parseMethodDirective(LocationConfig& location)
 	{
 		const std::string value = consumeValue("HTTP method").value;
 		if (value != "GET" && value != "POST" && value != "DELETE" &&
-			value != "HEAD")
+			value != "UPDATE")
 			throw std::runtime_error("Unsupported HTTP method '" + value + "'");
 		location.allowed_methods_.push_back(value);
 	}
