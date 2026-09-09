@@ -7,7 +7,14 @@ mode=${1:-all}
 pkg_cflags=""
 pkg_libs=""
 
-if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists gtest_main 2>/dev/null; then
+if [ -n "${GTEST_CFLAGS:-}" ] && [ -n "${GTEST_LIBS:-}" ]; then
+	pkg_cflags=$GTEST_CFLAGS
+	pkg_libs=$GTEST_LIBS
+elif [ -f "$HOME/.local/include/gtest/gtest.h" ] \
+	&& [ -f "$HOME/.local/lib/libgtest.a" ]; then
+	pkg_cflags="-I$HOME/.local/include"
+	pkg_libs="-L$HOME/.local/lib -lgtest_main -lgtest -lpthread"
+elif command -v pkg-config >/dev/null 2>&1 && pkg-config --exists gtest_main 2>/dev/null; then
 	pkg_cflags=$(pkg-config --cflags gtest_main)
 	pkg_libs=$(pkg-config --libs gtest_main)
 elif command -v gtest-config >/dev/null 2>&1; then
