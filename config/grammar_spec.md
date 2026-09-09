@@ -79,7 +79,7 @@ number = DIGIT, { DIGIT };
 
 WORD_CHAR = ( LETTER | DIGIT | "-" | "_" );
 
-HTTP_METHOD = "GET" | "POST" | "DELETE";
+HTTP_METHOD = "GET" | "POST" | "DELETE" | "UPDATE";
 
 LETTER = "A" | "B" | "C" | "D" | "E" | "F" | "G"
        | "H" | "I" | "J" | "K" | "L" | "M" | "N"
