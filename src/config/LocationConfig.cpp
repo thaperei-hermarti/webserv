@@ -73,14 +73,18 @@ std::ostream& operator<<(std::ostream& out, const LocationConfig& location)
 	out << "\nclient max body size: " << location.client_max_body_size_ << "\n";
 	out << "upload enabled: " << location.upload_enabled_ << "\n";
 	if (location.upload_enabled_)
+	{
 		out << "upload dir: " << location.upload_store_ << "\n";
+	}
 	for (std::map<std::string, std::string>::const_iterator it =
 			 location.cgi_extensions_.begin();
 		 it != location.cgi_extensions_.end();
 		 it++)
 	{
 		if (it == location.cgi_extensions_.begin())
+		{
 			out << "cgi_extension: ";
+		}
 		out << it->first << " => " << it->second << ",";
 	}
 	return (out);

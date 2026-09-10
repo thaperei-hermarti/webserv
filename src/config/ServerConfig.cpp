@@ -66,7 +66,9 @@ std::ostream& operator<<(std::ostream& out, const ServerConfig& server)
 	for (std::size_t i = 0; i < server.server_names_.size(); ++i)
 	{
 		if (i == 0)
+		{
 			out << "\nserver_names:";
+		}
 		out << " " << server.server_names_[i] << ",";
 	}
 	for (std::map<int, std::string>::const_iterator it =
@@ -75,7 +77,9 @@ std::ostream& operator<<(std::ostream& out, const ServerConfig& server)
 		 it++)
 	{
 		if (it == server.error_pages_.begin())
+		{
 			out << "\nerror_pages:";
+		}
 		out << " " << it->first << " => " << it->second << ",";
 	}
 	out << "\nRoot: " << server.root_ << "\n";

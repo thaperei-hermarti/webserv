@@ -77,12 +77,6 @@ TEST(FileConfigTest, GetPathReturnsConfiguredPath)
 	EXPECT_EQ(file.getPath(), config.getPath());
 }
 
-TEST(FileConfigTest, DefaultPathIsEmpty)
-{
-	FileConfig config;
-	EXPECT_EQ("", config.getPath());
-}
-
 TEST(FileConfigTest, IsFileExistsAndReadableForExistingFile)
 {
 	TempFile file;

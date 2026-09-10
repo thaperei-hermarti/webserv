@@ -21,12 +21,12 @@ typedef enum e_token
 	EOF_TOKEN
 } t_token;
 
-typedef struct s_token
+typedef struct Stoken
 {
-	std::string value;
-	t_token type;
-	int line;
-	int column;
+	std::string value_;
+	t_token type_;
+	int line_;
+	int column_;
 } t_lexer_token;
 
 std::string tokenTypeToString(t_token type);
@@ -36,7 +36,7 @@ class Lexer
   private:
 	std::vector<t_lexer_token> tokens_;
 	std::string input_;
-	std::size_t tokenIndex_;
+	std::size_t token_index_;
 
 	int pos_;
 	int line_;

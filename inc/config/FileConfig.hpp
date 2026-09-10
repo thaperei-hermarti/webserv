@@ -24,16 +24,15 @@ class FileConfig
 	std::string path_;
 
   public:
-	FileConfig();
-	FileConfig(std::string const path);
+	FileConfig(std::string const& path);
 	~FileConfig();
 
 	std::string getPath() const;
 	std::string readFile();
-	static int checkFileAccess(std::string const path, int mode);
-	static int isFileExistsAndReadable(std::string const path,
-									   std::string const index);
-	static int getTypePath(std::string const path);
+	static int checkFileAccess(std::string const& path, int mode);
+	static int isFileExistsAndReadable(std::string const& path,
+									   std::string const& index);
+	static int getTypePath(std::string const& path);
 };
 
 #endif

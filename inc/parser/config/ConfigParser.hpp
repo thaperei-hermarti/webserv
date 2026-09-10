@@ -23,11 +23,8 @@
 class ConfigParser
 {
   public:
-	ConfigParser();
 	ConfigParser(Lexer& lexer);
 	~ConfigParser();
-	ConfigParser(const ConfigParser& other);
-	ConfigParser& operator=(const ConfigParser& other);
 
 	std::vector<ServerConfig> parseConfig();
 	Lexer getLexer() const;
@@ -40,7 +37,7 @@ class ConfigParser
 	const t_lexer_token& consumeValue(const std::string& expected);
 	std::string parsePathValue(const std::string& expected);
 	int parseNumber(const std::string& expected);
-	void rejectDuplicate(bool& seen, const std::string& directive);
+	static void rejectDuplicate(bool& seen, const std::string& directive);
 
 	ServerConfig parseServerBlock();
 	LocationConfig parseLocationBlock();
