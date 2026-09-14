@@ -72,3 +72,8 @@ bool HttpRequest::isChunked() const
 {
 	return is_chunked_;
 }
+
+const std::map<std::string, std::string>& HttpRequest::getHeaders() const
+{
+	return headers_;
+}
