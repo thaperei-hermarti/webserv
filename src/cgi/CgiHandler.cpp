@@ -148,6 +148,7 @@ void CgiHandler::buildEnv(HttpRequest& request,
 std::vector<char*> CgiHandler::toCharArray()
 {
 	std::vector<char*> result;
+	result.reserve(env_.size());
 
 	for (std::size_t i = 0; i < env_.size(); ++i)
 	{
