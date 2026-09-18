@@ -11,19 +11,23 @@
 /* ************************************************************************** */
 
 #include "server/Reactor.hpp"
-
+#include <cerrno>
+#include <cstdlib>
+#include <iostream>
 #include <sys/epoll.h>
 #include <unistd.h>
 
-Reactor::Reactor() : epoll_fd_(epoll_create1(0))
-{
+Reactor::Reactor() : epoll_fd_(epoll_create(1)) {
+	if (epoll_fd_ < 0) {
+		exit(EXIT_FAILURE);
+	}
 }
 
 Reactor::~Reactor()
 {
 	if (epoll_fd_ >= 0)
 	{
-		::close(epoll_fd_);
+		close(epoll_fd_);
 	}
 }
 
@@ -46,8 +50,14 @@ Reactor& Reactor::operator=(const Reactor& other)
 
 void Reactor::registerHandler(IEventHandler* handler, EventType event_type)
 {
-	(void) handler;
-	(void) event_type;
+	struct epoll_event ev;
+
+	ev.events = event_type;
+	ev.data.ptr = handler;
+	if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, handler.getFd(), &ev) == -1) {
+		std::cerr << "server:error:epoll_ctl:" << strerror(errno) << std::endl;
+	}
+	events_.push_back()
 }
 
 void Reactor::unregisterHandler(int fd)
@@ -67,6 +77,13 @@ void Reactor::run()
 
 int Reactor::waitForEvents()
 {
+	while (true) {
+		int nfds = epoll_wait(epoll_fd_, events_.data(), events_.size(), -1);
+		for (int n = 0; n < nfds; ++n) {
+			IEventHandler	*handler = static_cast<IEventHandler *>(events_[n].data.ptr);
+			handler.
+		}
+	}
 	return 0;
 }
 
