@@ -23,7 +23,8 @@ enum ParseState
 	REQUEST_LINE,
 	HEADERS,
 	BODY,
-	DONE
+	DONE,
+	ERROR
 };
 
 class HttpRequestParser
@@ -36,6 +37,7 @@ class HttpRequestParser
 
 	void feed(const char* data, std::size_t len);
 	bool isComplete() const;
+	bool isError() const;
 	HttpRequest& getRequest();
 
   private:
@@ -45,6 +47,8 @@ class HttpRequestParser
 
 	ParseState state_;
 	std::size_t max_body_size_;
+	std::string buffer_;
+	std::size_t cursor_;
 	HttpRequest request_;
 };
 

@@ -72,3 +72,33 @@ bool HttpRequest::isChunked() const
 {
 	return is_chunked_;
 }
+
+void HttpRequest::setMethod(const std::string& method)
+{
+	method_ = method;
+}
+
+void HttpRequest::setUri(const std::string& uri)
+{
+	uri_ = uri;
+}
+
+void HttpRequest::setVersion(const std::string& version)
+{
+	version_ = version;
+}
+
+void HttpRequest::setHeader(const std::string& name, const std::string& value)
+{
+	headers_[name] = value;
+}
+
+void HttpRequest::setBody(const std::string& body)
+{
+	body_ = body;
+}
+
+void HttpRequest::setIsChunked(bool is_chunked)
+{
+	is_chunked_ = is_chunked;
+}

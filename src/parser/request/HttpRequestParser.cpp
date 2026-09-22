@@ -13,7 +13,7 @@
 #include "parser/request/HttpRequestParser.hpp"
 
 HttpRequestParser::HttpRequestParser(std::size_t max_body_size)
-	: state_(REQUEST_LINE), max_body_size_(max_body_size)
+	: state_(REQUEST_LINE), max_body_size_(max_body_size), cursor_(0)
 {
 }
 
@@ -23,7 +23,7 @@ HttpRequestParser::~HttpRequestParser()
 
 HttpRequestParser::HttpRequestParser(const HttpRequestParser& other)
 	: state_(other.state_), max_body_size_(other.max_body_size_),
-	  request_(other.request_)
+	  buffer_(other.buffer_), cursor_(other.cursor_), request_(other.request_)
 {
 }
 
@@ -33,6 +33,8 @@ HttpRequestParser& HttpRequestParser::operator=(const HttpRequestParser& other)
 	{
 		state_ = other.state_;
 		max_body_size_ = other.max_body_size_;
+		buffer_ = other.buffer_;
+		cursor_ = other.cursor_;
 		request_ = other.request_;
 	}
 	return *this;
@@ -40,13 +42,20 @@ HttpRequestParser& HttpRequestParser::operator=(const HttpRequestParser& other)
 
 void HttpRequestParser::feed(const char* data, std::size_t len)
 {
-	(void) data;
-	(void) len;
+	if (len > 0)
+	{
+		buffer_.append(data, len);
+	}
 }
 
 bool HttpRequestParser::isComplete() const
 {
 	return state_ == DONE;
+}
+
+bool HttpRequestParser::isError() const
+{
+	return state_ == ERROR;
 }
 
 HttpRequest& HttpRequestParser::getRequest()
