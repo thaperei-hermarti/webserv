@@ -13,15 +13,12 @@
 #ifndef WEBSERV_SERVER_EVENTTYPE_HPP
 #define WEBSERV_SERVER_EVENTTYPE_HPP
 
-#include <cstdint>
 #include <sys/epoll.h>
 
-enum EventType: std::uint8_t
+enum EventType
 {
 	READ = EPOLLIN,
 	WRITE = EPOLLOUT,
-	READ_WRITE = EPOLLIN | EPOLLOUT,
-	TIMEOUT = 010,
 };
 
 #endif
