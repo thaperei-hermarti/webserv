@@ -14,6 +14,8 @@
 
 #include "server/Acceptor.hpp"
 
+#include <csignal>
+
 Server::Server(const std::vector<ServerConfig>& configs) : configs_(configs)
 {
 }
@@ -47,8 +49,14 @@ Server& Server::operator=(const Server& other)
 	return *this;
 }
 
+void Server::ignoreSigPipe()
+{
+	signal(SIGPIPE, SIG_IGN);
+}
+
 void Server::init()
 {
+	ignoreSigPipe();
 }
 
 void Server::run()
