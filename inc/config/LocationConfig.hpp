@@ -16,6 +16,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <sstream>
 
 struct LocationConfig
 {
@@ -28,10 +29,14 @@ struct LocationConfig
 	std::string redirect_;
 	std::string root_;
 	bool autoindex_;
-	std::string index_file_;
+	std::vector<std::string> index_file_;
+	std::size_t client_max_body_size_;
+	std::map<int, std::string> error_pages_;
 	bool upload_enabled_;
 	std::string upload_store_;
 	std::map<std::string, std::string> cgi_extensions_;
 };
+
+std::ostream& operator<<(std::ostream& out, const LocationConfig& location);
 
 #endif

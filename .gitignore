@@ -2,3 +2,4 @@ obj/
 webserv
 unit_tests
 compile_commands.json
+*.swp

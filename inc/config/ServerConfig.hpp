@@ -17,6 +17,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <sstream>
 
 #include "config/LocationConfig.hpp"
 
@@ -32,9 +33,13 @@ struct ServerConfig
 	std::string host_;
 	std::vector<int> ports_;
 	std::vector<std::string> server_names_;
+	std::string root_;
+	std::vector<std::string> index_file_;
 	std::map<int, std::string> error_pages_;
 	std::size_t client_max_body_size_;
 	std::vector<LocationConfig> locations_;
 };
+
+std::ostream& operator<<(std::ostream& out, const ServerConfig& server);
 
 #endif

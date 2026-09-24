@@ -97,7 +97,7 @@ Commits must follow [Conventional Commits](https://www.conventionalcommits.org),
 <type>(<optional scope>): <description>
 ```
 
-Types: `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`.
+Types: `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`, `raw`, `wip`.
 
 Examples:
 
