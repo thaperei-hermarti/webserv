@@ -29,8 +29,8 @@ Server::~Server()
 }
 
 Server::Server(const Server& other)
-	: reactor_(other.reactor_), acceptors_(other.acceptors_),
-	  configs_(other.configs_), cgi_registry_(other.cgi_registry_),
+	: acceptors_(other.acceptors_), configs_(other.configs_),
+	  cgi_registry_(other.cgi_registry_),
 	  session_manager_(other.session_manager_)
 {
 }
@@ -39,7 +39,6 @@ Server& Server::operator=(const Server& other)
 {
 	if (this != &other)
 	{
-		reactor_ = other.reactor_;
 		acceptors_ = other.acceptors_;
 		configs_ = other.configs_;
 		cgi_registry_ = other.cgi_registry_;
