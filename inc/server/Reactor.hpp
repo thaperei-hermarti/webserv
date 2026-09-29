@@ -25,8 +25,6 @@ class Reactor
   public:
 	Reactor();
 	~Reactor();
-	Reactor(const Reactor& other);
-	Reactor& operator=(const Reactor& other);
 
 	void registerHandler(IEventHandler* handler, EventType event_type);
 	void unregisterHandler(int fd);
@@ -34,12 +32,18 @@ class Reactor
 	void run();
 
   private:
+	Reactor(const Reactor& other);
+	Reactor& operator=(const Reactor& other);
+
+	void handleError(int fd);
+	void handleHangup(int fd);
 	int waitForEvents();
-	void dispatch();
+	void dispatch(int active_fds);
 
 	std::map<int, IEventHandler*> handlers_;
 	int epoll_fd_;
 	std::vector<struct epoll_event> events_;
+	static const int MAX_EVENTS = 10;
 };
 
 #endif

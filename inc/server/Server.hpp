@@ -34,6 +34,8 @@ class Server
 	void run();
 
   private:
+	static void ignoreSigPipe();
+
 	Reactor reactor_;
 	std::vector<Acceptor*> acceptors_;
 	std::vector<ServerConfig> configs_;
