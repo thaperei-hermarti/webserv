@@ -17,6 +17,7 @@ LIBS =
 
 SRC_FILES = \
 	main.cpp \
+	logger/Logger.cpp \
 	http/request/HttpRequest.cpp \
 	http/response/HttpResponse.cpp \
 	http/response/ResponseBuilder.cpp \
