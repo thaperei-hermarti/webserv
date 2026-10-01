@@ -10,20 +10,61 @@
 /*                                                                            */
 /* ************************************************************************** */
 
+#include "logger/Logger.hpp"
 #include "cgi/CgiHandler.hpp"
+#include "server/Reactor.hpp"
 #include <cctype>
+#include <fcntl.h>
+#include <signal.h>
 #include <sstream>
+#include <sys/wait.h>
+#include <unistd.h>
 
 CgiHandler::CgiHandler() : pid_(-1)
 {
-	stdin_pipe_[0] = -1;
-	stdin_pipe_[1] = -1;
-	stdout_pipe_[0] = -1;
-	stdout_pipe_[1] = -1;
+	stdin_pipe_[0] = stdin_pipe_[1] = -1;
+	stdout_pipe_[0] = stdout_pipe_[1] = -1;
+	if (pipe(stdin_pipe_) < 0)
+	{
+		Logger::error("Stdin pipe");
+		return;
+	}
+	if (pipe(stdout_pipe_) < 0)
+	{
+		Logger::error("Stdout pipe");
+		closeFd(stdin_pipe_[0]);
+		closeFd(stdin_pipe_[1]);
+	}
 }
+
+//CgiHandler::CgiHandler(Reactor* reactor) : pid_(-1), reactor_(reactor)
+//{
+//	stdin_pipe_[0] = stdin_pipe_[1] = -1;
+//	stdout_pipe_[0] = stdout_pipe_[1] = -1;
+//	if (pipe(stdin_pipe_) < 0)
+//	{
+//		Logger::error("Stdin pipe");
+//		return;
+//	}
+//	if (pipe(stdout_pipe_) < 0)
+//	{
+//		Logger::error("Stdout pipe");
+//		closeFd(stdin_pipe_[0]);
+//		closeFd(stdin_pipe_[1]);
+//	}
+//}
 
 CgiHandler::~CgiHandler()
 {
+	if (pid_ > 0)
+	{
+		kill(pid_, SIGTERM);
+		waitpid(pid_, NULL, 0);
+	}
+	closeFd(stdin_pipe_[0]);
+	closeFd(stdin_pipe_[1]);
+	closeFd(stdout_pipe_[0]);
+	closeFd(stdout_pipe_[1]);
 }
 
 CgiHandler::CgiHandler(const CgiHandler& other)
@@ -48,6 +89,7 @@ CgiHandler& CgiHandler::operator=(const CgiHandler& other)
 		env_ = other.env_;
 		input_buffer_ = other.input_buffer_;
 		output_buffer_ = other.output_buffer_;
+		//reactor_ = other.reactor_;
 	}
 	return *this;
 }
@@ -59,10 +101,43 @@ int CgiHandler::getFd() const
 
 void CgiHandler::handleReadEvent()
 {
+	char buffer[4096];
+	ssize_t bytes_read = read(stdout_pipe_[0], buffer, sizeof(buffer));
+	if (bytes_read > 0)
+	{
+		output_buffer_.append(buffer, bytes_read);
+	}
+	else if (bytes_read == 0)
+	{
+		//if (reactor_ != NULL)
+		//	reactor_->unregisterHandler(stdout_pipe_[0]);
+		closeFd(stdout_pipe_[0]);
+		waitpid(pid_, NULL, 0);
+		pid_ = -1;
+	}
 }
 
 void CgiHandler::handleWriteEvent()
 {
+	if (input_buffer_.empty())
+	{
+		//if (reactor_ != NULL)
+		//	reactor_->unregisterHandler(stdin_pipe_[1]);
+		closeFd(stdin_pipe_[1]);
+		return;
+	}
+	ssize_t bytes_written =
+		write(stdin_pipe_[1], input_buffer_.c_str(), input_buffer_.size());
+	if (bytes_written > 0)
+	{
+		input_buffer_.erase(0, bytes_written);
+	}
+	if (input_buffer_.empty())
+	{
+		//if (reactor_ != NULL)
+		//	reactor_->unregisterHandler(stdin_pipe_[1]);
+		closeFd(stdin_pipe_[1]);
+	}
 }
 
 void CgiHandler::handleTimeout()
@@ -76,18 +151,74 @@ bool CgiHandler::wantsWrite() const
 
 HttpResponse CgiHandler::handle(HttpRequest& request, LocationConfig& config)
 {
-	(void) request;
-	(void) config;
+	std::string server_name = request.getHeader("host");
+	std::size_t colon = server_name.find(':');
+	if (colon != std::string::npos)
+	{
+		server_name.erase(colon);
+	}
+	buildEnv(request, config, server_name, 80);
+	input_buffer_ = request.getBody();
+	execute(request, config);
+	//	if (reactor_ != NULL)
+	//	{
+	//		reactor_->registerHandler(stdin_pipe_[1], this, WRITE);
+	//		reactor_->registerHandler(stdout_pipe_[0], this, READ);
+	//	}
 	return HttpResponse();
 }
 
 void CgiHandler::execute(HttpRequest& request, LocationConfig& config)
 {
-	(void) request;
-	(void) config;
+	std::string path = request.getUri();
+	std::size_t query = path.find('?');
+	path = path.substr(0, query);
+	std::size_t extension = path.rfind('.');
+	if (extension == std::string::npos)
+	{
+		Logger::warning("No extension");
+		return;
+	}
+	std::map<std::string, std::string>::const_iterator interpreter =
+		config.cgi_extensions_.find(path.substr(extension));
+	if (interpreter == config.cgi_extensions_.end())
+	{
+		Logger::warning("No interpreter for cgi");
+		return;
+	}
+	std::string script = config.root_ + path;
+	pid_ = fork();
+	if (pid_ < 0)
+	{
+		Logger::error("Forking process");
+		return;
+	}
+	if (pid_ == 0)
+	{
+		dup2(stdin_pipe_[0], STDIN_FILENO);
+		dup2(stdout_pipe_[1], STDOUT_FILENO);
+		close(stdin_pipe_[0]);
+		close(stdin_pipe_[1]);
+		close(stdout_pipe_[0]);
+		close(stdout_pipe_[1]);
+
+		std::vector<char*> envp = toCharArray();
+		char* argv[3];
+		argv[0] = const_cast<char*>(interpreter->second.c_str());
+		argv[1] = const_cast<char*>(script.c_str());
+		argv[2] = NULL;
+		execve(argv[0], argv, &envp[0]);
+		_exit(127);
+	}
+	closeFd(stdin_pipe_[0]);
+	closeFd(stdout_pipe_[1]);
+	int flags = fcntl(stdin_pipe_[1], F_GETFL, 0);
+	fcntl(stdin_pipe_[1], F_SETFL, flags | O_NONBLOCK);
+	flags = fcntl(stdout_pipe_[0], F_GETFL, 0);
+	fcntl(stdout_pipe_[0], F_SETFL, flags | O_NONBLOCK);
 }
 
-static std::string toUpperWithUnderscores(const std::string& str)
+std::string CgiHandler::toUpperWithUnderscores(const std::string& str)
 {
 	std::string normalized_str(str);
 	for (std::size_t i = 0; i < normalized_str.size(); ++i)
@@ -108,6 +239,7 @@ void CgiHandler::buildEnv(HttpRequest& request,
 						  const std::string& server_name,
 						  int server_port)
 {
+	env_.clear();
 	env_.push_back("REQUEST_METHOD=" + request.getMethod());
 	env_.push_back("SCRIPT_NAME=" + request.getUri());
 	env_.push_back("SCRIPT_FILENAME=" + config.root_);
@@ -160,4 +292,13 @@ std::vector<char*> CgiHandler::toCharArray()
 
 void CgiHandler::unchunkAndFeedStdin()
 {
+}
+
+void CgiHandler::closeFd(int& fd)
+{
+	if (fd >= 0)
+	{
+		close(fd);
+		fd = -1;
+	}
 }
