@@ -23,11 +23,13 @@
 #include "config/LocationConfig.hpp"
 
 class CgiRegistry;
+class Reactor;
 
 class CgiHandler : public IEventHandler, public IRequestHandler
 {
   public:
 	CgiHandler();
+	explicit CgiHandler(Reactor* reactor = NULL);
 	~CgiHandler();
 	CgiHandler(const CgiHandler& other);
 	CgiHandler& operator=(const CgiHandler& other);
@@ -46,8 +48,10 @@ class CgiHandler : public IEventHandler, public IRequestHandler
 	std::vector<char*> toCharArray();
 
   private:
-	static void execute(HttpRequest& request, LocationConfig& config);
+	void execute(HttpRequest& request, LocationConfig& config);
 	void unchunkAndFeedStdin();
+	static void closeFd(int& fd);
+	static std::string toUpperWithUnderscores(const std::string& str);
 
 	pid_t pid_;
 	int stdin_pipe_[2];
@@ -55,6 +59,7 @@ class CgiHandler : public IEventHandler, public IRequestHandler
 	std::vector<std::string> env_;
 	std::string input_buffer_;
 	std::string output_buffer_;
+	//	Reactor* reactor_;
 };
 
 #endif
