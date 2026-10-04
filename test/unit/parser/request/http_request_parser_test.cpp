@@ -272,3 +272,66 @@ TEST(HttpRequestParserTest, RequestLineMissingVersionIsError)
 	EXPECT_TRUE(parser.isError());
 	EXPECT_FALSE(parser.isComplete());
 }
+
+// Scenario: a header line without the required colon separator.
+//   Given : "Host localhost" instead of "Host: localhost"
+//   When  : the headers are parsed
+//   Then  : the parser reports an error
+TEST(HttpRequestParserTest, HeaderMissingColonIsError)
+{
+	HttpRequestParser parser(1024);
+
+	const char* request = "GET / HTTP/1.1\r\nHost localhost\r\n\r\n";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+}
+
+// Scenario: a chunk-size line that is not valid hexadecimal.
+//   Given : Transfer-Encoding: chunked with chunk-size "g"
+//   When  : the body is unchunked
+//   Then  : the parser reports an error
+TEST(HttpRequestParserTest, MalformedChunkSizeIsError)
+{
+	HttpRequestParser parser(1024);
+
+	const char* request = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						  "Transfer-Encoding: chunked\r\n\r\n"
+						  "g\r\nhello\r\n0\r\n\r\n";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+}
+
+// Scenario: a request line with an empty method token.
+//   Given : a leading space before the method
+//   When  : the request line is parsed
+//   Then  : the parser reports an error
+TEST(HttpRequestParserTest, EmptyMethodIsError)
+{
+	HttpRequestParser parser(1024);
+
+	const char* request = " GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+}
+
+// Scenario: a well-formed but non-listed method passes parsing (Option A).
+//   Given : "PATCH / HTTP/1.1" with a valid Host header
+//   When  : the request is parsed
+//   Then  : the parser succeeds; method enforcement is left to routing
+TEST(HttpRequestParserTest, UnknownMethodParsesFine)
+{
+	HttpRequestParser parser(1024);
+
+	const char* request = "PATCH / HTTP/1.1\r\nHost: localhost\r\n\r\n";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isComplete());
+	EXPECT_FALSE(parser.isError());
+	EXPECT_EQ(parser.getRequest().getMethod(), "PATCH");
+}
