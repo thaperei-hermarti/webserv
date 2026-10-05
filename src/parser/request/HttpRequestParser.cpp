@@ -49,6 +49,11 @@ bool HttpRequestParser::isComplete() const
 	return state_ == DONE;
 }
 
+bool HttpRequestParser::isError() const
+{
+	return state_ == ERROR;
+}
+
 HttpRequest& HttpRequestParser::getRequest()
 {
 	return request_;
