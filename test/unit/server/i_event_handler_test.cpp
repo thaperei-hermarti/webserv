@@ -10,6 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
+#include "server/Acceptor.hpp"
 #include "server/IEventHandler.hpp"
 
 #include <gtest/gtest.h>
@@ -91,12 +92,38 @@ class TestHandler : public IEventHandler
 	bool wants_write_;
 	bool* destroyed_;
 };
+
+class MinimalHandler : public IEventHandler
+{
+  public:
+	explicit MinimalHandler(int fd) : fd_(fd)
+	{
+	}
+
+	int getFd() const
+	{
+		return fd_;
+	}
+
+	void handleReadEvent()
+	{
+	}
+
+	void handleWriteEvent()
+	{
+	}
+
+  private:
+	int fd_;
+};
 } // namespace
 
 static_assert(std::is_abstract<IEventHandler>::value,
 			  "IEventHandler is expected to be a pure interface");
 static_assert(std::has_virtual_destructor<IEventHandler>::value,
 			  "IEventHandler requires a virtual destructor");
+static_assert(!std::is_abstract<Acceptor>::value,
+			  "Acceptor must be concrete once wantsWrite() is optional");
 
 TEST(IEventHandlerTest, IsAnAbstractInterface)
 {
@@ -147,4 +174,18 @@ TEST(IEventHandlerTest, DestroyingThroughBaseRunsTheDerivedDestructor)
 	delete event_handler;
 
 	EXPECT_TRUE(destroyed);
+}
+
+TEST(IEventHandlerTest, OptionalHooksDefaultToNoOpAndFalse)
+{
+	MinimalHandler handler(5);
+	IEventHandler& event_handler = handler;
+
+	EXPECT_FALSE(event_handler.wantsWrite());
+	event_handler.handleTimeout();
+}
+
+TEST(IEventHandlerTest, AcceptorImplementsTheContract)
+{
+	EXPECT_FALSE(std::is_abstract<Acceptor>::value);
 }
