@@ -6,7 +6,7 @@
 /*   By: hermarti <hermarti@student.42sp.org.br>    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/14 13:15:18 by hermarti          #+#    #+#             */
-/*   Updated: 2026/08/14 13:15:21 by hermarti         ###   ########.fr       */
+/*   Updated: 2026/10/06 18:09:19 by thaperei         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,6 +24,8 @@
 
 class CgiRegistry;
 class Reactor;
+
+#define TIMEOUT_CGI 5
 
 class CgiHandler : public IEventHandler, public IRequestHandler
 {
@@ -49,9 +51,9 @@ class CgiHandler : public IEventHandler, public IRequestHandler
 
   private:
 	void execute(HttpRequest& request, LocationConfig& config);
-	void unchunkAndFeedStdin();
 	static void closeFd(int& fd);
 	static std::string toUpperWithUnderscores(const std::string& str);
+	bool isDone() const;
 
 	pid_t pid_;
 	int stdin_pipe_[2];
@@ -59,6 +61,8 @@ class CgiHandler : public IEventHandler, public IRequestHandler
 	std::vector<std::string> env_;
 	std::string input_buffer_;
 	std::string output_buffer_;
+	time_t start_time_;
+	bool is_done_;
 	//	Reactor* reactor_;
 };
 

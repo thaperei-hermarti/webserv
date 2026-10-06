@@ -6,7 +6,7 @@
 /*   By: hermarti <hermarti@student.42sp.org.br>    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/14 13:20:30 by hermarti          #+#    #+#             */
-/*   Updated: 2026/08/14 13:20:31 by hermarti         ###   ########.fr       */
+/*   Updated: 2026/10/06 18:25:21 by thaperei         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,7 +20,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-CgiHandler::CgiHandler() : pid_(-1)
+CgiHandler::CgiHandler() : pid_(-1), start_time_(NULL), is_done_(false)
 {
 	stdin_pipe_[0] = stdin_pipe_[1] = -1;
 	stdout_pipe_[0] = stdout_pipe_[1] = -1;
@@ -114,6 +114,7 @@ void CgiHandler::handleReadEvent()
 		closeFd(stdout_pipe_[0]);
 		waitpid(pid_, NULL, 0);
 		pid_ = -1;
+		done_ = true;
 	}
 }
 
@@ -142,6 +143,13 @@ void CgiHandler::handleWriteEvent()
 
 void CgiHandler::handleTimeout()
 {
+	if (!is_done_ && difftime(time(NULL), start_time_) > TIMEOUT_CGI)
+	{
+		kill(_pid, SIGKILL);
+		int status;
+		waitpid(pid_, &status, 0);
+		done_ = true;
+	}
 }
 
 bool CgiHandler::wantsWrite() const
@@ -151,13 +159,6 @@ bool CgiHandler::wantsWrite() const
 
 HttpResponse CgiHandler::handle(HttpRequest& request, LocationConfig& config)
 {
-	std::string server_name = request.getHeader("host");
-	std::size_t colon = server_name.find(':');
-	if (colon != std::string::npos)
-	{
-		server_name.erase(colon);
-	}
-	buildEnv(request, config, server_name, 80);
 	input_buffer_ = request.getBody();
 	execute(request, config);
 	//	if (reactor_ != NULL)
@@ -202,6 +203,7 @@ void CgiHandler::execute(HttpRequest& request, LocationConfig& config)
 		close(stdout_pipe_[0]);
 		close(stdout_pipe_[1]);
 
+		buildEnv(request, config);
 		std::vector<char*> envp = toCharArray();
 		char* argv[3];
 		argv[0] = const_cast<char*>(interpreter->second.c_str());
@@ -234,30 +236,31 @@ std::string CgiHandler::toUpperWithUnderscores(const std::string& str)
 	return normalized_str;
 }
 
-void CgiHandler::buildEnv(HttpRequest& request,
-						  LocationConfig& config,
-						  const std::string& server_name,
-						  int server_port)
+void CgiHandler::buildEnv(HttpRequest& request, LocationConfig& config)
 {
 	env_.clear();
+	std::size_t question_mark_ = request.getUri().find('?');
+	std::string path_info_ = request.getUri().substr(0, question_mark_);
 	env_.push_back("REQUEST_METHOD=" + request.getMethod());
-	env_.push_back("SCRIPT_NAME=" + request.getUri());
-	env_.push_back("SCRIPT_FILENAME=" + config.root_);
-	env_.push_back("QUERY_STRING=" + request.getUri());
-	env_.push_back("PATH_INFO=" + request.getUri());
+	env_.push_back("SCRIPT_NAME=" + path_info_);
+	env_.push_back("SCRIPT_FILENAME=" + config.root_ + path_info_);
+	env_.push_back("QUERY_STRING=" + question_mark_ != std::string::npos
+			? request.getUri().substr(question_mark_ + 1) : "");
+	env_.push_back("PATH_TRANSLATED=" + config.root_ + path_info);
 	env_.push_back("SERVER_PROTOCOL=HTTP/1.1");
 	env_.push_back("SERVER_SOFTWARE=webserv/1.0");
 	env_.push_back("GATEWAY_INTERFACE=CGI/1.1");
+	env_.push_back("PATH_INFO=" + path_info_);
 
-	env_.push_back("SERVER_NAME=" + server_name);
-	std::ostringstream port_stream;
-	port_stream << server_port;
-	env_.push_back("SERVER_PORT=" + port_stream.str());
+	std::string host = request.getHeader("host");
+	std::size_t colon = host.find(':');
+	env_.push_back("SERVER_NAME=" + host.substr(colon));
+	env_.push_back("SERVER_PORT=" + host.substr(colon + 1, host.size()));
 
 	if (request.getMethod() == "POST")
 	{
 		std::map<std::string, std::string>::const_iterator it =
-			request.getHeaders().find("content-type");
+			request.find("content-type");
 		if (it != request.getHeaders().end())
 		{
 			env_.push_back("CONTENT_TYPE=" + it->second);
@@ -290,10 +293,6 @@ std::vector<char*> CgiHandler::toCharArray()
 	return result;
 }
 
-void CgiHandler::unchunkAndFeedStdin()
-{
-}
-
 void CgiHandler::closeFd(int& fd)
 {
 	if (fd >= 0)
@@ -301,4 +300,8 @@ void CgiHandler::closeFd(int& fd)
 		close(fd);
 		fd = -1;
 	}
+}
+
+bool isDone() const {
+	return is_done_;
 }
