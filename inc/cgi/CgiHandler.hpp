@@ -6,7 +6,7 @@
 /*   By: hermarti <hermarti@student.42sp.org.br>    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/14 13:15:18 by hermarti          #+#    #+#             */
-/*   Updated: 2026/10/06 18:09:19 by thaperei         ###   ########.fr       */
+/*   Updated: 2026/10/11 14:32:02 by thaperei         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -31,7 +31,7 @@ class CgiHandler : public IEventHandler, public IRequestHandler
 {
   public:
 	CgiHandler();
-	explicit CgiHandler(Reactor* reactor = NULL);
+	//explicit CgiHandler(Reactor* reactor = NULL);
 	~CgiHandler();
 	CgiHandler(const CgiHandler& other);
 	CgiHandler& operator=(const CgiHandler& other);
@@ -43,10 +43,7 @@ class CgiHandler : public IEventHandler, public IRequestHandler
 	bool wantsWrite() const;
 
 	HttpResponse handle(HttpRequest& request, LocationConfig& config);
-	void buildEnv(HttpRequest& request,
-				  LocationConfig& config,
-				  const std::string& server_name,
-				  int server_port);
+	void buildEnv(HttpRequest& request, LocationConfig& config);
 	std::vector<char*> toCharArray();
 
   private:

@@ -6,7 +6,7 @@
 /*   By: hermarti <hermarti@student.42sp.org.br>    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/14 13:20:30 by hermarti          #+#    #+#             */
-/*   Updated: 2026/10/06 18:25:21 by thaperei         ###   ########.fr       */
+/*   Updated: 2026/10/12 16:55:01 by thaperei         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,6 +19,7 @@
 #include <sstream>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <iostream>
 
 CgiHandler::CgiHandler() : pid_(-1), start_time_(NULL), is_done_(false)
 {
@@ -114,7 +115,7 @@ void CgiHandler::handleReadEvent()
 		closeFd(stdout_pipe_[0]);
 		waitpid(pid_, NULL, 0);
 		pid_ = -1;
-		done_ = true;
+		is_done_ = true;
 	}
 }
 
@@ -145,10 +146,10 @@ void CgiHandler::handleTimeout()
 {
 	if (!is_done_ && difftime(time(NULL), start_time_) > TIMEOUT_CGI)
 	{
-		kill(_pid, SIGKILL);
+		kill(pid_, SIGKILL);
 		int status;
 		waitpid(pid_, &status, 0);
-		done_ = true;
+		is_done_ = true;
 	}
 }
 
@@ -198,10 +199,10 @@ void CgiHandler::execute(HttpRequest& request, LocationConfig& config)
 	{
 		dup2(stdin_pipe_[0], STDIN_FILENO);
 		dup2(stdout_pipe_[1], STDOUT_FILENO);
-		close(stdin_pipe_[0]);
-		close(stdin_pipe_[1]);
-		close(stdout_pipe_[0]);
-		close(stdout_pipe_[1]);
+		closeFd(stdin_pipe_[0]);
+		closeFd(stdin_pipe_[1]);
+		closeFd(stdout_pipe_[0]);
+		closeFd(stdout_pipe_[1]);
 
 		buildEnv(request, config);
 		std::vector<char*> envp = toCharArray();
@@ -239,31 +240,39 @@ std::string CgiHandler::toUpperWithUnderscores(const std::string& str)
 void CgiHandler::buildEnv(HttpRequest& request, LocationConfig& config)
 {
 	env_.clear();
-	std::size_t question_mark_ = request.getUri().find('?');
-	std::string path_info_ = request.getUri().substr(0, question_mark_);
+	std::string uri = request.getUri();
+	std::size_t question_mark_ = uri.find('?');
 	env_.push_back("REQUEST_METHOD=" + request.getMethod());
-	env_.push_back("SCRIPT_NAME=" + path_info_);
-	env_.push_back("SCRIPT_FILENAME=" + config.root_ + path_info_);
-	env_.push_back("QUERY_STRING=" + question_mark_ != std::string::npos
-			? request.getUri().substr(question_mark_ + 1) : "");
-	env_.push_back("PATH_TRANSLATED=" + config.root_ + path_info);
+	env_.push_back("QUERY_STRING=" + (question_mark_ != std::string::npos
+			? uri.substr(question_mark_ + 1) : ""));
 	env_.push_back("SERVER_PROTOCOL=HTTP/1.1");
 	env_.push_back("SERVER_SOFTWARE=webserv/1.0");
 	env_.push_back("GATEWAY_INTERFACE=CGI/1.1");
+
+	std::size_t pos_path_info_ = uri.find('/', uri.find('.'));
+	std::string script_name_ = uri.substr(0, (pos_path_info_ != std::string::npos
+			? pos_path_info_ : question_mark_));
+	std::string path_info_("");
+	if (pos_path_info_ != std::string::npos)
+	{
+		path_info_ = uri.substr(pos_path_info_, question_mark_ - pos_path_info_);
+	}
 	env_.push_back("PATH_INFO=" + path_info_);
+	env_.push_back("PATH_TRANSLATED=" + config.root_ + path_info_);
+	env_.push_back("SCRIPT_NAME=" + script_name_);
+	env_.push_back("SCRIPT_FILENAME=" + config.root_ + script_name_);
 
 	std::string host = request.getHeader("host");
 	std::size_t colon = host.find(':');
-	env_.push_back("SERVER_NAME=" + host.substr(colon));
+	env_.push_back("SERVER_NAME=" + host.substr(0, colon));
 	env_.push_back("SERVER_PORT=" + host.substr(colon + 1, host.size()));
 
 	if (request.getMethod() == "POST")
 	{
-		std::map<std::string, std::string>::const_iterator it =
-			request.find("content-type");
-		if (it != request.getHeaders().end())
+		std::string content_type = request.getHeader("content-type");
+		if (!content_type.empty())
 		{
-			env_.push_back("CONTENT_TYPE=" + it->second);
+			env_.push_back("CONTENT_TYPE=" + content_type);
 		}
 
 		std::ostringstream length_stream;
@@ -302,6 +311,6 @@ void CgiHandler::closeFd(int& fd)
 	}
 }
 
-bool isDone() const {
+bool CgiHandler::isDone() const {
 	return is_done_;
 }
