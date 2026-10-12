@@ -20,8 +20,13 @@ class IEventHandler
 	virtual int getFd() const = 0;
 	virtual void handleReadEvent() = 0;
 	virtual void handleWriteEvent() = 0;
-	virtual bool wantsWrite() const = 0;
-	virtual void handleTimeout() = 0;
+	virtual bool wantsWrite() const
+	{
+		return false;
+	}
+	virtual void handleTimeout()
+	{
+	}
 };
 
 #endif
