@@ -11,6 +11,8 @@
 /* ************************************************************************** */
 
 #include "http/request/HttpRequest.hpp"
+#include <cctype>
+
 // helper to case-insensitivity
 
 static std::string toLower(const std::string& str)
@@ -71,7 +73,8 @@ const std::string& HttpRequest::getVersion() const
 const std::string& HttpRequest::getHeader(const std::string& name) const
 {
 	static const std::string EMPTY;
-	std::map<std::string, std::string>::const_iterator it = headers_.find(name);
+	std::map<std::string, std::string>::const_iterator it = 
+		headers_.find(toLower(name));
 	return it != headers_.end() ? it->second : EMPTY;
 }
 
@@ -84,3 +87,34 @@ bool HttpRequest::isChunked() const
 {
 	return is_chunked_;
 }
+
+void HttpRequest::setMethod(const std::string& method)
+{
+	method_ = method;
+}
+
+void HttpRequest::setUri(const std::string& uri)
+{
+	uri_ = uri;
+}
+
+void HttpRequest::setVersion(const std::string& version)
+{
+	version_ = version;
+}
+
+void HttpRequest::setBody(const std::string& body)
+{
+	body_ = body;
+}
+
+void HttpRequest::setChunked(bool is_chunked)
+{
+	is_chunked_ = is_chunked;
+}
+
+void HttpRequest::setHeader(const std::string& name, const std::string& value)
+{
+	headers_[toLower(name)] = value;
+}
+

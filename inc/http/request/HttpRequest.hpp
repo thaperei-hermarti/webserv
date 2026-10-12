@@ -38,6 +38,8 @@ class HttpRequest
 	void setBody(const std::string& body);
 	void setChunked(bool is_chunked);
 
+	const std::map<std::string, std::string>& getHeaders() const;
+
   private:
 	std::string method_;
 	std::string uri_;

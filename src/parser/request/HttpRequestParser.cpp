@@ -11,7 +11,7 @@
 /* ************************************************************************** */
 
 #include "parser/request/HttpRequestParser.hpp"
-
+#include <cctype>
 // trim to " Host " => "Host"
 
 static std::string trim(const std::string& str)
@@ -110,7 +110,7 @@ void HttpRequestParser::feed(const char* data, std::size_t len)
 	if (cursor_ > 0)
 	{
 		buffer_.erase(0, cursor_);
-		cursor_  = 0;
+		cursor_ = 0;
 	}
 }
 
@@ -137,7 +137,7 @@ void HttpRequestParser::parseRequestLine()
 	std::size_t first = line.find(' ');
 	std::size_t second = line.find(' ', first + 1);
 	if (first == std::string::npos || second == std::string::npos ||
-			line.find(' ', second + 1) != std::string::npos)
+		line.find(' ', second + 1) != std::string::npos)
 	{
 		state_ = ERROR;
 		return;
@@ -172,7 +172,7 @@ void HttpRequestParser::parseHeaders()
 			return;
 		}
 		request_.setHeader(trim(line.substr(0, colon)),
-					trim(line.substr(colon + 1)));
+				trim(line.substr(colon + 1)));
 		pos = line_end + 2;
 	}
 	cursor_ = end + 4;
