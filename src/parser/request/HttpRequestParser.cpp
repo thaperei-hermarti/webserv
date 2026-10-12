@@ -18,7 +18,9 @@ static std::string trim(const std::string& str)
 {
 	std::size_t first = str.find_first_not_of(" \t");
 	if (first == std::string::npos)
+	{
 		return "";
+	}
 	std::size_t last = str.find_last_not_of(" \t");
 	return str.substr(first, last - first + 1);
 }
@@ -72,7 +74,9 @@ HttpRequestParser& HttpRequestParser::operator=(const HttpRequestParser& other)
 void HttpRequestParser::feed(const char* data, std::size_t len)
 {
 	if (len == 0 || state_ == ERROR || state_ == DONE)
+	{
 		return;
+	}
 	buffer_.append(data, len);
 	while (state_ != ERROR && state_ != DONE)
 	{
@@ -87,15 +91,21 @@ void HttpRequestParser::feed(const char* data, std::size_t len)
 				break;
 			case BODY:
 				if (chunked_)
+				{
 					unchunkBody();
-				else
+				}
+				else 
+				{
 					parseBody();
+				}
 				break;
 			default:
 				break;
 		}
 		if (cursor_ == before)
+		{
 			break;
+		}
 	}
 	if (cursor_ > 0)
 	{
@@ -120,7 +130,9 @@ void HttpRequestParser::parseRequestLine()
 {
 	std::size_t end = buffer_.find("\r\n", cursor_);
 	if (end == std::string::npos)
+	{
 		return ;
+	}
 	std::string line = buffer_.substr(cursor_, end - cursor_);
 	std::size_t first = line.find(' ');
 	std::size_t second = line.find(' ', first + 1);
@@ -141,13 +153,17 @@ void HttpRequestParser::parseHeaders()
 {
 	std::size_t end = buffer_.find("\r\n\r\n", cursor_);
 	if (end == std::string::npos)
+	{
 		return ;
+	}
 	std::size_t pos = cursor_;
 	while (pos < end)
 	{
 		std::size_t line_end = buffer_.find("\r\n", pos);
 		if (line_end == std::string::npos || line_end > end)
+		{
 			break ;
+		}
 		std::string line = buffer_.substr(pos, line_end - pos);
 		std::size_t colon = line.find(':');
 		if (colon == std::string::npos)
@@ -177,7 +193,9 @@ void HttpRequestParser::parseHeaders()
 		}
 		std::size_t length = 0;
 		for (std::size_t i = 0; i < value.size(); ++i)
+		{
 			length = length * 10 + static_cast<std::size_t>(value[i] - '0');
+		}
 		if (length > max_body_size_)
 		{
 			state_ = ERROR;
@@ -185,9 +203,13 @@ void HttpRequestParser::parseHeaders()
 		}
 		body_remaining_ = length;
 		if (length == 0)
+		{
 			state_ = DONE;
+		}
 		else
+		{
 			state_ = BODY;
+		}
 		return;
 	}
 	if (request_.getHeader("transfer-encoding") == "chunked")
@@ -203,7 +225,9 @@ void HttpRequestParser::parseHeaders()
 void HttpRequestParser::parseBody()
 {
 	if (buffer_.size() - cursor_ < body_remaining_)
+	{
 		return;
+	}
 	request_.setBody(buffer_.substr(cursor_, body_remaining_));
 	cursor_ +=  body_remaining_;
 	state_ = DONE;
@@ -213,7 +237,9 @@ void HttpRequestParser::unchunkBody()
 {
 	std::size_t line_end = buffer_.find("\r\n", cursor_);
 	if (line_end == std::string::npos)
+	{
 		return ;
+	}
 	std::string size_line = buffer_.substr(cursor_, line_end - cursor_);
 	std::size_t size = 0;
 	std::size_t i = 0;
@@ -238,7 +264,9 @@ void HttpRequestParser::unchunkBody()
 	if (size == 0)
 	{
 		if (buffer_.size() - cursor_ < 2)
+		{
 			return;
+		}
 		if (buffer_[cursor_] != '\r' || buffer_[cursor_ + 1] != '\n')
 		{
 			state_ = ERROR;
@@ -249,7 +277,9 @@ void HttpRequestParser::unchunkBody()
 		return;
 	}
 	if (buffer_.size() - cursor_ < size + 2)
+	{
 		return;
+	}
 	request_.setBody(request_.getBody() + buffer_.substr(cursor_, size));
 	cursor_ += size;
 	if (buffer_[cursor_] != '\r' || buffer_[cursor_ + 1] != '\n')
