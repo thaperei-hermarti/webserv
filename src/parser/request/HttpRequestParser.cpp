@@ -131,7 +131,7 @@ void HttpRequestParser::parseRequestLine()
 	std::size_t end = buffer_.find("\r\n", cursor_);
 	if (end == std::string::npos)
 	{
-		return ;
+		return;
 	}
 	std::string line = buffer_.substr(cursor_, end - cursor_);
 	std::size_t first = line.find(' ');
@@ -154,7 +154,7 @@ void HttpRequestParser::parseHeaders()
 	std::size_t end = buffer_.find("\r\n\r\n", cursor_);
 	if (end == std::string::npos)
 	{
-		return ;
+		return;
 	}
 	std::size_t pos = cursor_;
 	while (pos < end)
@@ -162,7 +162,7 @@ void HttpRequestParser::parseHeaders()
 		std::size_t line_end = buffer_.find("\r\n", pos);
 		if (line_end == std::string::npos || line_end > end)
 		{
-			break ;
+			break;
 		}
 		std::string line = buffer_.substr(pos, line_end - pos);
 		std::size_t colon = line.find(':');
@@ -238,7 +238,7 @@ void HttpRequestParser::unchunkBody()
 	std::size_t line_end = buffer_.find("\r\n", cursor_);
 	if (line_end == std::string::npos)
 	{
-		return ;
+		return;
 	}
 	std::string size_line = buffer_.substr(cursor_, line_end - cursor_);
 	std::size_t size = 0;
