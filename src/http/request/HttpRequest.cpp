@@ -11,6 +11,18 @@
 /* ************************************************************************** */
 
 #include "http/request/HttpRequest.hpp"
+// helper to case-insensitivity
+
+static std::string toLower(const std::string& str)
+{
+	std::string lower = str;
+	for (std::size_t i = 0; i < lower.size(); ++i)
+	{
+		lower[i] = static_cast<char>(
+				std::tolower(static_cast<unsigned char>(lower[i])));
+	}
+	return lower;
+}
 
 HttpRequest::HttpRequest() : is_chunked_(false)
 {
