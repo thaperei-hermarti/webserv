@@ -115,6 +115,11 @@ class PairFds
 		return fds_[1];
 	}
 
+	void closeClientEnd()
+	{
+		closeEnd(fds_[1]);
+	}
+
   private:
 	static void closeEnd(int& fd)
 	{
@@ -174,7 +179,7 @@ class ConnectionTest : public ::testing::Test
 		// Production fds behind epoll are non-blocking; this also makes a
 		// missing EAGAIN check fail fast instead of hanging the suite.
 		ASSERT_TRUE(setNonBlocking(pair_.read_end())) << std::strerror(errno);
-		connection_ = new Connection(pair_.read_end(), config_);
+		connection_ = new Connection(pair_.read_end(), config_, reactor_);
 	}
 
 	void TearDown() override
@@ -194,8 +199,24 @@ class ConnectionTest : public ::testing::Test
 		return pair_;
 	}
 
+	ServerConfig& config()
+	{
+		return config_;
+	}
+
+	Reactor& reactor()
+	{
+		return reactor_;
+	}
+
+	int wired_fd() const
+	{
+		return pair_.read_end();
+	}
+
   private:
 	ServerConfig config_;
+	Reactor reactor_;
 	PairFds pair_;
 	Connection* connection_ = nullptr;
 };
@@ -271,10 +292,9 @@ TEST_F(ConnectionTest, ReactorDispatchesReadEventsToConnection)
 	int wakeup[2] = {-1, -1};
 	ASSERT_EQ(0, ::pipe(wakeup)) << std::strerror(errno);
 
-	Reactor reactor;
 	WakeupHandler stopper(wakeup[0]);
-	reactor.registerHandler(&connection(), READ);
-	reactor.registerHandler(&stopper, READ);
+	reactor().registerHandler(&connection(), READ);
+	reactor().registerHandler(&stopper, READ);
 
 	// Pending data before the loop starts: level-triggered epoll fires at once.
 	const ssize_t sent = ::write(pair().client_end(), kPayload, kPayloadSize);
@@ -282,11 +302,11 @@ TEST_F(ConnectionTest, ReactorDispatchesReadEventsToConnection)
 
 	testing::internal::CaptureStdout();
 	std::thread loop(
-		[&reactor]()
+		[this]()
 		{
 			try
 			{
-				reactor.run();
+				reactor().run();
 			}
 			catch (const LoopFinished&)
 			{
@@ -304,6 +324,137 @@ TEST_F(ConnectionTest, ReactorDispatchesReadEventsToConnection)
 	EXPECT_TRUE(drained) << "the reactor never delivered a read event";
 	EXPECT_NE(std::string::npos, echoed.find("6"))
 		<< "expected the byte count on stdout, got: [" << echoed << "]";
+
+	::close(wakeup[0]);
+	::close(wakeup[1]);
+}
+
+TEST_F(ConnectionTest, PeerCloseClosesTheSocket)
+{
+	pair().closeClientEnd();
+
+	connection().handleReadEvent();
+
+	EXPECT_EQ(-1, connection().getFd());
+	EXPECT_EQ(-1, ::fcntl(wired_fd(), F_GETFL));
+}
+
+TEST_F(ConnectionTest, PeerCloseUnregistersFromTheReactor)
+{
+	reactor().registerHandler(&connection(), READ);
+	pair().closeClientEnd();
+
+	connection().handleReadEvent();
+
+	EXPECT_FALSE(reactor().isRegistered(wired_fd()));
+}
+
+TEST_F(ConnectionTest, PeerCloseMarksTheConnectionClosed)
+{
+	pair().closeClientEnd();
+
+	connection().handleReadEvent();
+
+	EXPECT_EQ(CLOSED, connection().getState());
+}
+
+TEST_F(ConnectionTest, DataBeforePeerCloseIsKept)
+{
+	const ssize_t sent = ::write(pair().client_end(), kPayload, kPayloadSize);
+	ASSERT_EQ(static_cast<ssize_t>(kPayloadSize), sent) << std::strerror(errno);
+	pair().closeClientEnd();
+
+	connection().handleReadEvent();
+
+	EXPECT_EQ(std::string(kPayload), connection().getInBuffer());
+	EXPECT_EQ(-1, connection().getFd());
+	EXPECT_EQ(CLOSED, connection().getState());
+}
+
+TEST_F(ConnectionTest, DataWithoutPeerCloseKeepsTheConnectionOpen)
+{
+	// EAGAIN after a successful read is not a disconnect: the subject forbids
+	// inspecting errno, so a drain loop would tear this connection down.
+	const ssize_t sent = ::write(pair().client_end(), kPayload, kPayloadSize);
+	ASSERT_EQ(static_cast<ssize_t>(kPayloadSize), sent) << std::strerror(errno);
+
+	connection().handleReadEvent();
+
+	EXPECT_EQ(std::string(kPayload), connection().getInBuffer());
+	EXPECT_NE(-1, connection().getFd());
+	EXPECT_NE(CLOSED, connection().getState());
+}
+
+TEST_F(ConnectionTest, ReadErrorClosesTheConnection)
+{
+	// recv() on a regular file fails with ENOTSOCK; a read error must still
+	// tear the connection down instead of leaving the descriptor dangling.
+	const int broken_fd = ::open("/dev/null", O_RDONLY);
+	ASSERT_GE(broken_fd, 0) << std::strerror(errno);
+	Connection broken(broken_fd, config(), reactor());
+
+	broken.handleReadEvent();
+
+	EXPECT_EQ(-1, broken.getFd());
+	EXPECT_EQ(-1, ::fcntl(broken_fd, F_GETFL));
+	EXPECT_EQ(CLOSED, broken.getState());
+}
+
+TEST_F(ConnectionTest, RepeatedReadEventAfterDisconnectIsANoOp)
+{
+	pair().closeClientEnd();
+	connection().handleReadEvent();
+	ASSERT_EQ(-1, connection().getFd());
+
+	connection().handleReadEvent();
+
+	EXPECT_EQ(-1, connection().getFd());
+	EXPECT_EQ(CLOSED, connection().getState());
+}
+
+TEST_F(ConnectionTest, ReactorHandlesDisconnectWithoutDanglingHandler)
+{
+	int wakeup[2] = {-1, -1};
+	ASSERT_EQ(0, ::pipe(wakeup)) << std::strerror(errno);
+
+	reactor().registerHandler(&connection(), READ);
+	WakeupHandler stopper(wakeup[0]);
+	reactor().registerHandler(&stopper, READ);
+
+	std::thread loop(
+		[this]()
+		{
+			try
+			{
+				reactor().run();
+			}
+			catch (const LoopFinished&)
+			{
+			}
+		});
+
+	pair().closeClientEnd();
+
+	// The peer closing makes epoll report the socket readable; the loop must
+	// close and unregister it without any further request from the test.
+	bool closed = false;
+	for (int waited = 0; waited < kDrainWaitMs; ++waited)
+	{
+		if (::fcntl(wired_fd(), F_GETFL) == -1)
+		{
+			closed = true;
+			break;
+		}
+		::usleep(1000);
+	}
+
+	const char wake = 'x';
+	(void) ::write(wakeup[1], &wake, 1);
+	loop.join();
+
+	EXPECT_TRUE(closed) << "the reactor never delivered the disconnect";
+	EXPECT_FALSE(reactor().isRegistered(wired_fd()));
+	EXPECT_EQ(CLOSED, connection().getState());
 
 	::close(wakeup[0]);
 	::close(wakeup[1]);
