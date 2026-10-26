@@ -14,6 +14,9 @@
 
 #include "cgi/CgiHandler.hpp"
 #include "config/ServerConfig.hpp"
+#include <iostream>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 Connection::Connection(int fd, ServerConfig& config)
 	: fd_(fd), state_(READING_HEADERS),
@@ -56,6 +59,11 @@ Connection& Connection::operator=(const Connection& other)
 	return *this;
 }
 
+const std::string& Connection::getInBuffer() const
+{
+	return in_buffer_;
+}
+
 int Connection::getFd() const
 {
 	return fd_;
@@ -63,6 +71,24 @@ int Connection::getFd() const
 
 void Connection::handleReadEvent()
 {
+	static const std::size_t READ_CHUNK = 8192;
+	char buffer[READ_CHUNK];
+	ssize_t bytes_read = 0;
+
+	while (true)
+	{
+		bytes_read = recv(fd_, buffer, READ_CHUNK, 0);
+		if (bytes_read == 0)
+		{
+			break;
+		}
+		if (bytes_read < 0)
+		{
+			break;
+		}
+		std::cout << bytes_read << '\n' << std::flush;
+		in_buffer_.append(buffer, bytes_read);
+	}
 }
 
 void Connection::handleWriteEvent()
