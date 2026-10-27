@@ -33,6 +33,7 @@ class Connection : public IEventHandler
 	Connection(const Connection& other);
 	Connection& operator=(const Connection& other);
 
+	const std::string& getInBuffer() const;
 	int getFd() const;
 	void handleReadEvent();
 	void handleWriteEvent();

@@ -37,6 +37,7 @@ class HttpRequestParser
 
 	void feed(const char* data, std::size_t len);
 	bool isComplete() const;
+	bool isError() const;
 	HttpRequest& getRequest();
 
 	bool isError() const;

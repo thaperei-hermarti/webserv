@@ -13,11 +13,12 @@
 #ifndef WEBSERV_SERVER_EVENTTYPE_HPP
 #define WEBSERV_SERVER_EVENTTYPE_HPP
 
+#include <sys/epoll.h>
+
 enum EventType
 {
-	READ,
-	WRITE,
-	READ_WRITE
+	READ = EPOLLIN,
+	WRITE = EPOLLOUT,
 };
 
 #endif

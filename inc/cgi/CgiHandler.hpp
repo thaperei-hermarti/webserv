@@ -19,10 +19,10 @@
 
 #include "server/IEventHandler.hpp"
 #include "server/IRequestHandler.hpp"
+#include "http/request/HttpRequest.hpp"
+#include "config/LocationConfig.hpp"
 
 class CgiRegistry;
-class HttpRequest;
-struct LocationConfig;
 
 class CgiHandler : public IEventHandler, public IRequestHandler
 {
@@ -39,10 +39,14 @@ class CgiHandler : public IEventHandler, public IRequestHandler
 	bool wantsWrite() const;
 
 	HttpResponse handle(HttpRequest& request, LocationConfig& config);
+	void buildEnv(HttpRequest& request,
+				  LocationConfig& config,
+				  const std::string& server_name,
+				  int server_port);
+	std::vector<char*> toCharArray();
 
   private:
-	void execute(HttpRequest& request, LocationConfig& config);
-	void buildEnv(HttpRequest& request, LocationConfig& config);
+	static void execute(HttpRequest& request, LocationConfig& config);
 	void unchunkAndFeedStdin();
 
 	pid_t pid_;

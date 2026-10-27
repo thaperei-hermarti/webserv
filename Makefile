@@ -68,22 +68,25 @@ re: fclean all
 
 check-tools:
 	@echo "[INFO] Checking for development tools..."
-	@for tool in clang-format clang-tidy; do \
+	@for tool in clang-format clang-tidy valgrind; do \
 		if command -v $$tool >/dev/null 2>&1; then \
 			echo "[OK] $$tool found"; \
 		else \
 			echo "[WARNING] $$tool not found"; \
-			echo "[INFO] Install with: sudo apt-get install $$tool"; \
+			echo "[INFO] Install it with: make setup"; \
 			echo ""; \
 		fi; \
 	done
-	@if command -v clang-format >/dev/null 2>&1 && command -v clang-tidy >/dev/null 2>&1; then \
+	@if command -v clang-format >/dev/null 2>&1 && command -v clang-tidy >/dev/null 2>&1 && command -v valgrind >/dev/null 2>&1; then \
 		echo "[OK] All development tools are installed"; \
 	else \
-		echo "[INFO] Some tools are missing. Install them for full functionality."; \
+		echo "[INFO] Some tools are missing. Run 'make setup' to install them."; \
 	fi
 
-setup: check-tools
+install-deps:
+	@bash scripts/install-deps.sh
+
+setup: check-tools install-deps check-deps
 	@bash scripts/setup-hooks.sh
 
 format:
@@ -98,4 +101,4 @@ lint:
 	@clang-tidy $(SRC) -- $(CFLAGS) $(INCLUDES)
 	@echo "[OK] clang-tidy found no issues"
 
-.PHONY: all clean fclean re bonus setup check-tools format format-check lint test test-run test-run-valgrind check-deps
+.PHONY: all clean fclean re bonus setup check-tools format format-check lint test test-run test-run-valgrind check-deps install-deps

@@ -88,6 +88,7 @@ bool HttpRequest::isChunked() const
 	return is_chunked_;
 }
 
+<<<<<<< HEAD
 void HttpRequest::setMethod(const std::string& method)
 {
 	method_ = method;

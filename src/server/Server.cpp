@@ -14,6 +14,8 @@
 
 #include "server/Acceptor.hpp"
 
+#include <csignal>
+
 Server::Server(const std::vector<ServerConfig>& configs) : configs_(configs)
 {
 }
@@ -29,8 +31,8 @@ Server::~Server()
 }
 
 Server::Server(const Server& other)
-	: reactor_(other.reactor_), acceptors_(other.acceptors_),
-	  configs_(other.configs_), cgi_registry_(other.cgi_registry_),
+	: acceptors_(other.acceptors_), configs_(other.configs_),
+	  cgi_registry_(other.cgi_registry_),
 	  session_manager_(other.session_manager_)
 {
 }
@@ -39,7 +41,6 @@ Server& Server::operator=(const Server& other)
 {
 	if (this != &other)
 	{
-		reactor_ = other.reactor_;
 		acceptors_ = other.acceptors_;
 		configs_ = other.configs_;
 		cgi_registry_ = other.cgi_registry_;
@@ -48,8 +49,14 @@ Server& Server::operator=(const Server& other)
 	return *this;
 }
 
+void Server::ignoreSigPipe()
+{
+	signal(SIGPIPE, SIG_IGN);
+}
+
 void Server::init()
 {
+	ignoreSigPipe();
 }
 
 void Server::run()
