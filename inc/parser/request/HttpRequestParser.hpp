@@ -40,8 +40,6 @@ class HttpRequestParser
 	bool isError() const;
 	HttpRequest& getRequest();
 
-	bool isError() const;
-
   private:
 	void parseRequestLine();
 	void parseHeaders();

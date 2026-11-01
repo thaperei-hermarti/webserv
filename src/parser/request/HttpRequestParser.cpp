@@ -13,7 +13,6 @@
 #include "parser/request/HttpRequestParser.hpp"
 #include <cctype>
 // trim to " Host " => "Host"
-
 static std::string trim(const std::string& str)
 {
 	std::size_t first = str.find_first_not_of(" \t");
@@ -39,8 +38,8 @@ static std::size_t hexValue(char c)
 }
 
 HttpRequestParser::HttpRequestParser(std::size_t max_body_size)
-	: state_(REQUEST_LINE), max_body_size_(max_body_size), cursor_(0),
-	body_remaining_(0), chunked_(false)
+	: buffer_(), cursor_(0), body_remaining_(0), chunked_(false),
+	  state_(REQUEST_LINE), max_body_size_(max_body_size), request_()
 {
 }
 
@@ -49,7 +48,9 @@ HttpRequestParser::~HttpRequestParser()
 }
 
 HttpRequestParser::HttpRequestParser(const HttpRequestParser& other)
-	: state_(other.state_), max_body_size_(other.max_body_size_),
+	: buffer_(other.buffer_), cursor_(other.cursor_),
+	  body_remaining_(other.body_remaining_), chunked_(other.chunked_),
+	  state_(other.state_), max_body_size_(other.max_body_size_),
 	  request_(other.request_)
 {
 }
@@ -58,6 +59,10 @@ HttpRequestParser& HttpRequestParser::operator=(const HttpRequestParser& other)
 {
 	if (this != &other)
 	{
+		buffer_ = other.buffer_;
+		cursor_ = other.cursor_;
+		body_remaining_ = other.body_remaining_;
+		chunked_ = other.chunked_;
 		state_ = other.state_;
 		max_body_size_ = other.max_body_size_;
 		request_ = other.request_;
@@ -65,11 +70,11 @@ HttpRequestParser& HttpRequestParser::operator=(const HttpRequestParser& other)
 	return *this;
 }
 
-/*  
+/*
  ** acumulation in buffer_
  ** cursor_ to already consumation
  ** erase(0, cursor) in the end of feed
-*/
+ */
 
 void HttpRequestParser::feed(const char* data, std::size_t len)
 {
@@ -94,7 +99,7 @@ void HttpRequestParser::feed(const char* data, std::size_t len)
 				{
 					unchunkBody();
 				}
-				else 
+				else
 				{
 					parseBody();
 				}
@@ -156,6 +161,20 @@ void HttpRequestParser::parseRequestLine()
 
 void HttpRequestParser::parseHeaders()
 {
+	if (cursor_ >= 2 && buffer_.size() >= cursor_ + 2 &&
+		buffer_[cursor_ - 2] == '\r' && buffer_[cursor_ - 1] == '\n' &&
+		buffer_[cursor_] == '\r' && buffer_[cursor_ + 1] == '\n')
+	{
+		cursor_ += 2;
+		if (request_.getVersion() == "HTTP/1.1" &&
+			request_.getHeader("host").empty())
+		{
+			state_ = ERROR;
+			return;
+		}
+		state_ = DONE;
+		return;
+	}
 	std::size_t end = buffer_.find("\r\n\r\n", cursor_);
 	if (end == std::string::npos)
 	{
@@ -234,7 +253,7 @@ void HttpRequestParser::parseBody()
 		return;
 	}
 	request_.setBody(buffer_.substr(cursor_, body_remaining_));
-	cursor_ +=  body_remaining_;
+	cursor_ += body_remaining_;
 	state_ = DONE;
 }
 
