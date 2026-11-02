@@ -196,12 +196,12 @@ void HttpRequestParser::parseHeaders()
 			return;
 		}
 		request_.setHeader(trim(line.substr(0, colon)),
-				trim(line.substr(colon + 1)));
+						   trim(line.substr(colon + 1)));
 		pos = line_end + 2;
 	}
 	cursor_ = end + 4;
 	if (request_.getVersion() == "HTTP/1.1" &&
-			request_.getHeader("host").empty())
+		request_.getHeader("host").empty())
 	{
 		state_ = ERROR;
 		return;
