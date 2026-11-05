@@ -364,8 +364,13 @@ TEST_F(ConnectionTest, DataBeforePeerCloseIsKept)
 	ASSERT_EQ(static_cast<ssize_t>(kPayloadSize), sent) << std::strerror(errno);
 	pair().closeClientEnd();
 
+	// Level-triggered epoll delivers the buffered bytes and then the EOF as
+	// separate readable events; one recv() cannot observe both.
 	connection().handleReadEvent();
+	EXPECT_EQ(std::string(kPayload), connection().getInBuffer());
+	EXPECT_NE(-1, connection().getFd());
 
+	connection().handleReadEvent();
 	EXPECT_EQ(std::string(kPayload), connection().getInBuffer());
 	EXPECT_EQ(-1, connection().getFd());
 	EXPECT_EQ(CLOSED, connection().getState());
@@ -454,6 +459,61 @@ TEST_F(ConnectionTest, ReactorHandlesDisconnectWithoutDanglingHandler)
 
 	EXPECT_TRUE(closed) << "the reactor never delivered the disconnect";
 	EXPECT_FALSE(reactor().isRegistered(wired_fd()));
+	EXPECT_EQ(CLOSED, connection().getState());
+
+	::close(wakeup[0]);
+	::close(wakeup[1]);
+}
+
+TEST_F(ConnectionTest, ReactorClosesConnectionAfterDataAndPeerClose)
+{
+	int wakeup[2] = {-1, -1};
+	ASSERT_EQ(0, ::pipe(wakeup)) << std::strerror(errno);
+
+	reactor().registerHandler(&connection(), READ);
+	WakeupHandler stopper(wakeup[0]);
+	reactor().registerHandler(&stopper, READ);
+
+	const ssize_t sent = ::write(pair().client_end(), kPayload, kPayloadSize);
+	ASSERT_EQ(static_cast<ssize_t>(kPayloadSize), sent) << std::strerror(errno);
+	pair().closeClientEnd();
+
+	testing::internal::CaptureStdout();
+	std::thread loop(
+		[this]()
+		{
+			try
+			{
+				reactor().run();
+			}
+			catch (const LoopFinished&)
+			{
+			}
+		});
+
+	// epoll reports EPOLLIN and EPOLLHUP together here: the loop must let the
+	// handler consume the bytes and observe the EOF, not unregister it early.
+	bool closed = false;
+	for (int waited = 0; waited < kDrainWaitMs; ++waited)
+	{
+		if (::fcntl(wired_fd(), F_GETFL) == -1)
+		{
+			closed = true;
+			break;
+		}
+		::usleep(1000);
+	}
+
+	const char wake = 'x';
+	(void) ::write(wakeup[1], &wake, 1);
+	loop.join();
+	std::cout.flush();
+	testing::internal::GetCapturedStdout();
+
+	EXPECT_TRUE(closed)
+		<< "the reactor stranded the connection on a data+EOF event";
+	EXPECT_FALSE(reactor().isRegistered(wired_fd()));
+	EXPECT_EQ(std::string(kPayload), connection().getInBuffer());
 	EXPECT_EQ(CLOSED, connection().getState());
 
 	::close(wakeup[0]);
