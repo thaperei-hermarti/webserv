@@ -11,6 +11,20 @@
 /* ************************************************************************** */
 
 #include "http/request/HttpRequest.hpp"
+#include <cctype>
+
+// helper to case-insensitivity
+
+static std::string toLower(const std::string& str)
+{
+	std::string lower = str;
+	for (std::size_t i = 0; i < lower.size(); ++i)
+	{
+		lower[i] = static_cast<char>(
+			std::tolower(static_cast<unsigned char>(lower[i])));
+	}
+	return lower;
+}
 
 HttpRequest::HttpRequest() : is_chunked_(false)
 {
@@ -59,7 +73,8 @@ const std::string& HttpRequest::getVersion() const
 const std::string& HttpRequest::getHeader(const std::string& name) const
 {
 	static const std::string EMPTY;
-	std::map<std::string, std::string>::const_iterator it = headers_.find(name);
+	std::map<std::string, std::string>::const_iterator it =
+		headers_.find(toLower(name));
 	return it != headers_.end() ? it->second : EMPTY;
 }
 
@@ -76,4 +91,34 @@ bool HttpRequest::isChunked() const
 const std::map<std::string, std::string>& HttpRequest::getHeaders() const
 {
 	return headers_;
+}
+
+void HttpRequest::setMethod(const std::string& method)
+{
+	method_ = method;
+}
+
+void HttpRequest::setUri(const std::string& uri)
+{
+	uri_ = uri;
+}
+
+void HttpRequest::setVersion(const std::string& version)
+{
+	version_ = version;
+}
+
+void HttpRequest::setBody(const std::string& body)
+{
+	body_ = body;
+}
+
+void HttpRequest::setChunked(bool is_chunked)
+{
+	is_chunked_ = is_chunked;
+}
+
+void HttpRequest::setHeader(const std::string& name, const std::string& value)
+{
+	headers_[toLower(name)] = value;
 }

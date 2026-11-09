@@ -23,27 +23,24 @@
 class CgiHandler;
 class HttpRequest;
 class HttpResponse;
-class Reactor;
 struct ServerConfig;
 
 class Connection : public IEventHandler
 {
   public:
-	Connection(int fd, ServerConfig& config, Reactor& reactor);
+	Connection(int fd, ServerConfig& config);
 	~Connection();
 	Connection(const Connection& other);
 	Connection& operator=(const Connection& other);
 
 	const std::string& getInBuffer() const;
 	int getFd() const;
-	ConnState getState() const;
 	void handleReadEvent();
 	void handleWriteEvent();
 	void handleTimeout();
 	bool wantsWrite() const;
 
   private:
-	void closeConnection();
 	void processRequest();
 	void sendResponse(HttpResponse& response);
 
@@ -55,7 +52,6 @@ class Connection : public IEventHandler
 	HttpRequest* current_request_;
 	HttpResponse* current_response_;
 	ServerConfig& server_config_;
-	Reactor* reactor_;
 	CgiHandler* cgi_handler_;
 	time_t last_activity_;
 	bool keep_alive_;

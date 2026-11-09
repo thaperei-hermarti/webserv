@@ -44,6 +44,12 @@ class HttpRequestParser
 	void parseRequestLine();
 	void parseHeaders();
 	void unchunkBody();
+	void parseBody();
+
+	std::string buffer_;
+	std::size_t cursor_;
+	std::size_t body_remaining_;
+	bool chunked_;
 
 	ParseState state_;
 	std::size_t max_body_size_;

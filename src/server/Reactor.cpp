@@ -39,11 +39,6 @@ Reactor::~Reactor()
 	}
 }
 
-bool Reactor::isRegistered(int fd) const
-{
-	return handlers_.find(fd) != handlers_.end();
-}
-
 void Reactor::registerHandler(IEventHandler* handler, EventType event_type)
 {
 	struct epoll_event ev;
@@ -78,15 +73,14 @@ void Reactor::unregisterHandler(int fd)
 
 void Reactor::updateEvents(int fd, EventType event_type)
 {
-	std::map<int, IEventHandler*>::iterator it = handlers_.find(fd);
-	if (it == handlers_.end())
+	if (handlers_.find(fd) == handlers_.end())
 	{
 		return;
 	}
 	struct epoll_event ev;
 
 	ev.events = event_type;
-	ev.data.ptr = it->second;
+	ev.data.ptr = handlers_.at(fd);
 	if (epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev) == -1)
 	{
 		std::cerr << "server:error:epoll_ctl_mod:" << strerror(errno) << '\n';
@@ -117,21 +111,18 @@ void Reactor::run()
 int Reactor::waitForEvents()
 {
 	return epoll_wait(
-		epoll_fd_, &events_[0], static_cast<int>(events_.size()), -1);
+		epoll_fd_, events_.data(), static_cast<int>(events_.size()), -1);
 }
 
-void Reactor::handleHangup(IEventHandler* handler)
+void Reactor::handleHangup(int fd)
 {
-	handler->handleReadEvent();
+	unregisterHandler(fd);
 }
 
-void Reactor::handleError(IEventHandler* handler)
+void Reactor::handleError(int fd)
 {
-	if (handler->getFd() >= 0)
-	{
-		std::cerr << "server:error:EPOLLERR on fd " << handler->getFd() << '\n';
-	}
-	handler->handleReadEvent();
+	std::cerr << "server:error:EPOLLERR on fd " << fd << '\n';
+	unregisterHandler(fd);
 }
 
 void Reactor::dispatch(int active_fds)
@@ -150,11 +141,11 @@ void Reactor::dispatch(int active_fds)
 		}
 		if (static_cast<bool>(events_[n].events & EPOLLHUP))
 		{
-			handleHangup(handler);
+			handleHangup(handler->getFd());
 		}
 		if (static_cast<bool>(events_[n].events & EPOLLERR))
 		{
-			handleError(handler);
+			handleError(handler->getFd());
 		}
 	}
 }
