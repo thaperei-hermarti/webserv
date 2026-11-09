@@ -26,6 +26,7 @@ class Reactor
 	Reactor();
 	~Reactor();
 
+	bool isRegistered(int fd) const;
 	void registerHandler(IEventHandler* handler, EventType event_type);
 	void unregisterHandler(int fd);
 	void updateEvents(int fd, EventType event_type);
@@ -35,8 +36,8 @@ class Reactor
 	Reactor(const Reactor& other);
 	Reactor& operator=(const Reactor& other);
 
-	void handleError(int fd);
-	void handleHangup(int fd);
+	static void handleError(IEventHandler* handler);
+	static void handleHangup(IEventHandler* handler);
 	int waitForEvents();
 	void dispatch(int active_fds);
 
