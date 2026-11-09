@@ -27,10 +27,17 @@ class HttpRequest
 	const std::string& getMethod() const;
 	const std::string& getUri() const;
 	const std::string& getVersion() const;
+	const std::string& getHeader(const std::string& name) const;
 	const std::map<std::string, std::string>& getHeaders() const;
 	const std::string& getBody() const;
 	bool isChunked() const;
-	const std::string& getHeader(const std::string& name) const;
+
+	void setMethod(const std::string& method);
+	void setUri(const std::string& uri);
+	void setVersion(const std::string& version);
+	void setHeader(const std::string& name, const std::string& value);
+	void setBody(const std::string& body);
+	void setChunked(bool is_chunked);
 
   private:
 	std::string method_;
