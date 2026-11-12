@@ -30,6 +30,7 @@ class Reactor
 	void registerHandler(IEventHandler* handler, EventType event_type);
 	void unregisterHandler(int fd);
 	void updateEvents(int fd, EventType event_type);
+	int eventMask(int fd) const;
 	void run();
 
   private:
@@ -41,7 +42,12 @@ class Reactor
 	int waitForEvents();
 	void dispatch(int active_fds);
 
-	std::map<int, IEventHandler*> handlers_;
+	struct HandlerEntry
+	{
+		IEventHandler* handler_;
+		int events_;
+	};
+	std::map<int, HandlerEntry> handlers_;
 	int epoll_fd_;
 	std::vector<struct epoll_event> events_;
 	static const int MAX_EVENTS = 10;

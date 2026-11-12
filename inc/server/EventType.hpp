@@ -19,6 +19,7 @@ enum EventType
 {
 	READ = EPOLLIN,
 	WRITE = EPOLLOUT,
+	READ_WRITE = EPOLLIN | EPOLLOUT,
 };
 
 #endif

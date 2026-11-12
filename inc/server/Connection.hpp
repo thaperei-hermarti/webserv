@@ -35,12 +35,14 @@ class Connection : public IEventHandler
 	Connection& operator=(const Connection& other);
 
 	const std::string& getInBuffer() const;
+	const std::string& getOutBuffer() const;
 	int getFd() const;
 	ConnState getState() const;
 	void handleReadEvent();
 	void handleWriteEvent();
 	void handleTimeout();
 	bool wantsWrite() const;
+	void queueOutput(const std::string& out_buffer);
 
   private:
 	void closeConnection();

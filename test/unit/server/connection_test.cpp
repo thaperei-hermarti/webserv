@@ -29,9 +29,8 @@
 
 namespace
 {
-// On read-ready, recv() into the input buffer and echo the byte count to
-// stdout (issue #164). Disconnect handling (recv() 0/error) is issue #165 and
-// is deliberately not exercised here.
+// Shared fixtures for the Connection suite: real socketpairs, a real Reactor,
+// and a wakeup pipe that unwinds run() deterministically.
 const int kDrainWaitMs = 2000;
 const char kPayload[] = "hello\n";
 const std::size_t kPayloadSize = 6;
@@ -167,6 +166,63 @@ bool waitForDrain(int fd, int timeout_ms)
 		::usleep(1000);
 	}
 	return isDrained(fd);
+}
+
+// Everything currently readable on fd, without blocking.
+std::string recvAvailable(int fd)
+{
+	std::string out;
+	char buffer[4096];
+	ssize_t got;
+
+	while ((got = ::recv(fd, buffer, sizeof buffer, MSG_DONTWAIT)) > 0)
+	{
+		out.append(buffer, static_cast<std::string::size_type>(got));
+	}
+	return out;
+}
+
+// Patterned payload: a prefix/suffix mix-up cannot pass by coincidence.
+std::string makePayload(std::size_t size)
+{
+	std::string payload;
+	char next = 'a';
+
+	payload.reserve(size);
+	for (std::size_t i = 0; i < size; ++i)
+	{
+		payload.push_back(next);
+		next = (next == 'z') ? 'a' : static_cast<char>(next + 1);
+	}
+	return payload;
+}
+
+// Shrinks the kernel send buffer so a large queue cannot flush in one send().
+bool setSmallSendBuffer(int fd)
+{
+	const int bytes = 4096;
+
+	return ::setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &bytes, sizeof bytes) == 0;
+}
+
+// One send() per write event: drain the peer so the next send() has room.
+bool flushWithReads(Connection& connection,
+					int client_fd,
+					std::string& received,
+					int max_iterations)
+{
+	for (int i = 0; i < max_iterations; ++i)
+	{
+		connection.handleWriteEvent();
+		received += recvAvailable(client_fd);
+		if (!connection.wantsWrite())
+		{
+			received += recvAvailable(client_fd);
+			return true;
+		}
+		::usleep(100);
+	}
+	return false;
 }
 } // namespace
 
@@ -515,6 +571,189 @@ TEST_F(ConnectionTest, ReactorClosesConnectionAfterDataAndPeerClose)
 	EXPECT_FALSE(reactor().isRegistered(wired_fd()));
 	EXPECT_EQ(std::string(kPayload), connection().getInBuffer());
 	EXPECT_EQ(CLOSED, connection().getState());
+
+	::close(wakeup[0]);
+	::close(wakeup[1]);
+}
+
+TEST_F(ConnectionTest, QueueOutputHoldsTheBytesUntilThePeerTakesThem)
+{
+	reactor().registerHandler(&connection(), READ);
+	EXPECT_FALSE(connection().wantsWrite());
+
+	connection().queueOutput(kPayload);
+
+	EXPECT_EQ(std::string(kPayload), connection().getOutBuffer());
+	EXPECT_TRUE(connection().wantsWrite());
+}
+
+TEST_F(ConnectionTest, QueueOutputAppendsAcrossCalls)
+{
+	reactor().registerHandler(&connection(), READ);
+
+	connection().queueOutput("hello ");
+	connection().queueOutput("world\n");
+
+	EXPECT_EQ(std::string("hello world\n"), connection().getOutBuffer());
+}
+
+TEST_F(ConnectionTest, WriteEventFlushesQueuedBytesToThePeer)
+{
+	reactor().registerHandler(&connection(), READ);
+	connection().queueOutput(kPayload);
+
+	connection().handleWriteEvent();
+
+	EXPECT_EQ(std::string(kPayload), recvAvailable(pair().client_end()));
+	EXPECT_TRUE(connection().getOutBuffer().empty());
+	EXPECT_FALSE(connection().wantsWrite());
+	EXPECT_NE(-1, connection().getFd());
+}
+
+TEST_F(ConnectionTest, WriteEventWithNothingQueuedIsANoOp)
+{
+	// send(fd, "", 0) returns 0; without an empty-buffer guard that would look
+	// like an error and kill a healthy connection.
+	reactor().registerHandler(&connection(), READ);
+
+	connection().handleWriteEvent();
+
+	EXPECT_EQ(std::string(), recvAvailable(pair().client_end()));
+	EXPECT_NE(-1, connection().getFd());
+	EXPECT_NE(CLOSED, connection().getState());
+}
+
+TEST_F(ConnectionTest, PartialWriteKeepsTheUnsentSuffix)
+{
+	reactor().registerHandler(&connection(), READ);
+	ASSERT_TRUE(setSmallSendBuffer(wired_fd())) << std::strerror(errno);
+
+	const std::string payload = makePayload(1 << 20);
+	connection().queueOutput(payload);
+
+	connection().handleWriteEvent();
+
+	const std::string received = recvAvailable(pair().client_end());
+	ASSERT_GT(received.size(), 0u) << "the first write event flushed nothing";
+	ASSERT_LT(received.size(), payload.size())
+		<< "the payload fit in one send(); no partial write was forced";
+	EXPECT_EQ(payload.substr(0, received.size()), received);
+	EXPECT_EQ(payload.substr(received.size()), connection().getOutBuffer());
+	EXPECT_TRUE(connection().wantsWrite());
+}
+
+TEST_F(ConnectionTest, RepeatedWriteEventsEventuallyFlushTheWholePayload)
+{
+	reactor().registerHandler(&connection(), READ);
+	ASSERT_TRUE(setSmallSendBuffer(wired_fd())) << std::strerror(errno);
+
+	const std::string payload = makePayload(1 << 20);
+	connection().queueOutput(payload);
+
+	std::string received;
+	ASSERT_TRUE(
+		flushWithReads(connection(), pair().client_end(), received, 100000))
+		<< "the write path stopped making progress";
+	EXPECT_EQ(payload, received);
+	EXPECT_TRUE(connection().getOutBuffer().empty());
+	EXPECT_NE(-1, connection().getFd());
+	EXPECT_NE(CLOSED, connection().getState());
+}
+
+TEST_F(ConnectionTest, WriteErrorClosesTheConnection)
+{
+	// send() on a non-socket fails with ENOTSOCK; like the read path, a write
+	// error must tear the connection down instead of leaving a dangling fd.
+	const int broken_fd = ::open("/dev/null", O_WRONLY);
+	ASSERT_GE(broken_fd, 0) << std::strerror(errno);
+	Connection broken(broken_fd, config(), reactor());
+
+	broken.queueOutput(kPayload);
+	broken.handleWriteEvent();
+
+	EXPECT_EQ(-1, broken.getFd());
+	EXPECT_EQ(-1, ::fcntl(broken_fd, F_GETFL));
+	EXPECT_EQ(CLOSED, broken.getState());
+}
+
+TEST_F(ConnectionTest, RepeatedWriteEventAfterDisconnectIsANoOp)
+{
+	const int broken_fd = ::open("/dev/null", O_WRONLY);
+	ASSERT_GE(broken_fd, 0) << std::strerror(errno);
+	Connection broken(broken_fd, config(), reactor());
+	broken.queueOutput(kPayload);
+	broken.handleWriteEvent();
+	ASSERT_EQ(-1, broken.getFd());
+
+	broken.handleWriteEvent();
+
+	EXPECT_EQ(-1, broken.getFd());
+	EXPECT_EQ(CLOSED, broken.getState());
+}
+
+TEST_F(ConnectionTest, QueueOutputArmsWriteInterest)
+{
+	reactor().registerHandler(&connection(), READ);
+
+	connection().queueOutput(kPayload);
+
+	EXPECT_EQ(EPOLLIN | EPOLLOUT, reactor().eventMask(wired_fd()));
+}
+
+TEST_F(ConnectionTest, DrainingTheQueueDisarmsWriteInterest)
+{
+	reactor().registerHandler(&connection(), READ);
+	connection().queueOutput(kPayload);
+
+	connection().handleWriteEvent();
+
+	EXPECT_TRUE(connection().getOutBuffer().empty());
+	EXPECT_EQ(EPOLLIN, reactor().eventMask(wired_fd()));
+}
+
+TEST_F(ConnectionTest, ReactorFlushesQueuedOutputEndToEnd)
+{
+	int wakeup[2] = {-1, -1};
+	ASSERT_EQ(0, ::pipe(wakeup)) << std::strerror(errno);
+
+	reactor().registerHandler(&connection(), READ);
+	WakeupHandler stopper(wakeup[0]);
+	reactor().registerHandler(&stopper, READ);
+
+	const std::string payload = makePayload(64 * 1024);
+	connection().queueOutput(payload);
+
+	std::thread loop(
+		[this]()
+		{
+			try
+			{
+				reactor().run();
+			}
+			catch (const LoopFinished&)
+			{
+			}
+		});
+
+	// Without EPOLLOUT armed, the reactor never delivers a write event and
+	// this loop times out with only a fraction of the payload.
+	std::string received;
+	for (int waited = 0;
+		 waited < kDrainWaitMs && received.size() < payload.size();
+		 ++waited)
+	{
+		received += recvAvailable(pair().client_end());
+		::usleep(1000);
+	}
+
+	const char wake = 'x';
+	(void) ::write(wakeup[1], &wake, 1);
+	loop.join();
+
+	EXPECT_EQ(payload, received) << "the reactor never flushed the output";
+	EXPECT_TRUE(connection().getOutBuffer().empty());
+	EXPECT_FALSE(connection().wantsWrite());
+	EXPECT_EQ(EPOLLIN, reactor().eventMask(wired_fd()));
 
 	::close(wakeup[0]);
 	::close(wakeup[1]);
