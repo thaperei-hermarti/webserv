@@ -56,7 +56,9 @@ void Reactor::registerHandler(IEventHandler* handler, EventType event_type)
 	}
 	else
 	{
-		handlers_[handler->getFd()] = handler;
+		HandlerEntry& entry = handlers_[handler->getFd()];
+		entry.handler_ = handler;
+		entry.events_ = event_type;
 	}
 }
 
@@ -78,19 +80,39 @@ void Reactor::unregisterHandler(int fd)
 
 void Reactor::updateEvents(int fd, EventType event_type)
 {
-	std::map<int, IEventHandler*>::iterator it = handlers_.find(fd);
+	std::map<int, HandlerEntry>::iterator it = handlers_.find(fd);
+
 	if (it == handlers_.end())
+	{
+		return;
+	}
+	if (it->second.events_ == event_type)
 	{
 		return;
 	}
 	struct epoll_event ev;
 
 	ev.events = event_type;
-	ev.data.ptr = it->second;
+	ev.data.ptr = it->second.handler_;
 	if (epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev) == -1)
 	{
 		std::cerr << "server:error:epoll_ctl_mod:" << strerror(errno) << '\n';
 	}
+	else
+	{
+		it->second.events_ = event_type;
+	}
+}
+
+int Reactor::eventMask(int fd) const
+{
+	std::map<int, HandlerEntry>::const_iterator it = handlers_.find(fd);
+
+	if (it == handlers_.end())
+	{
+		return 0;
+	}
+	return it->second.events_;
 }
 
 void Reactor::run()
