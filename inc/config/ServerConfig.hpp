@@ -14,6 +14,7 @@
 #define WEBSERV_CONFIG_SERVERCONFIG_HPP
 
 #include <cstddef>
+#include <ctime>
 #include <map>
 #include <string>
 #include <vector>
@@ -38,6 +39,7 @@ struct ServerConfig
 	std::map<int, std::string> error_pages_;
 	std::size_t client_max_body_size_;
 	std::vector<LocationConfig> locations_;
+	time_t idle_timeout_;
 };
 
 std::ostream& operator<<(std::ostream& out, const ServerConfig& server);

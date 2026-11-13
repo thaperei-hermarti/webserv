@@ -17,6 +17,7 @@
 #include "server/Reactor.hpp"
 #include "cgi/CgiHandler.hpp"
 #include "config/ServerConfig.hpp"
+#include <cstddef>
 #include <iostream>
 #include <string>
 #include <unistd.h>
@@ -116,6 +117,7 @@ void Connection::handleReadEvent()
 	}
 	std::cout << bytes_read << '\n' << std::flush;
 	in_buffer_.append(buffer, bytes_read);
+	last_activity_ = time(NULL);
 }
 
 void Connection::handleWriteEvent()
@@ -145,6 +147,16 @@ void Connection::handleWriteEvent()
 
 void Connection::handleTimeout()
 {
+	closeConnection();
+}
+
+bool Connection::isTimedOut(time_t now) const
+{
+	if (fd_ < 0)
+	{
+		return false;
+	}
+	return now - last_activity_ >= server_config_.idle_timeout_;
 }
 
 bool Connection::wantsWrite() const

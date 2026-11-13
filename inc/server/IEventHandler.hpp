@@ -13,6 +13,8 @@
 #ifndef WEBSERV_SERVER_IEVENTHANDLER_HPP
 #define WEBSERV_SERVER_IEVENTHANDLER_HPP
 
+#include <ctime>
+
 class IEventHandler
 {
   public:
@@ -26,6 +28,11 @@ class IEventHandler
 	}
 	virtual void handleTimeout()
 	{
+	}
+	virtual bool isTimedOut(time_t now) const
+	{
+		(void) now;
+		return false;
 	}
 };
 
