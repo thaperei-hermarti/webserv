@@ -41,6 +41,7 @@ class Connection : public IEventHandler
 	void handleReadEvent();
 	void handleWriteEvent();
 	void handleTimeout();
+	bool isTimedOut(time_t now) const;
 	bool wantsWrite() const;
 	void queueOutput(const std::string& out_buffer);
 

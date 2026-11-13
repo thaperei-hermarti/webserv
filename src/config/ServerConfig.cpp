@@ -14,7 +14,7 @@
 
 ServerConfig::ServerConfig()
 	: host_("localhost"), ports_(1, 80), index_file_(1, "index.html"),
-	  client_max_body_size_(1024 * 1024)
+	  client_max_body_size_(1024 * 1024), idle_timeout_(30)
 {
 }
 
@@ -23,7 +23,7 @@ ServerConfig::ServerConfig(const ServerConfig& other)
 	  server_names_(other.server_names_), root_(other.root_),
 	  index_file_(other.index_file_), error_pages_(other.error_pages_),
 	  client_max_body_size_(other.client_max_body_size_),
-	  locations_(other.locations_)
+	  locations_(other.locations_), idle_timeout_(other.idle_timeout_)
 {
 }
 
@@ -39,6 +39,7 @@ ServerConfig& ServerConfig::operator=(const ServerConfig& other)
 		error_pages_ = other.error_pages_;
 		client_max_body_size_ = other.client_max_body_size_;
 		locations_ = other.locations_;
+		idle_timeout_ = other.idle_timeout_;
 	}
 	return *this;
 }
@@ -99,5 +100,5 @@ std::ostream& operator<<(std::ostream& out, const ServerConfig& server)
 	{
 		out << " " << *it;
 	}
-	return (out);
+	return out;
 }
