@@ -12,11 +12,13 @@
 
 #include "server/Connection.hpp"
 
+#include "server/EventType.hpp"
 #include "server/ConnState.hpp"
 #include "server/Reactor.hpp"
 #include "cgi/CgiHandler.hpp"
 #include "config/ServerConfig.hpp"
 #include <iostream>
+#include <string>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -69,6 +71,11 @@ const std::string& Connection::getInBuffer() const
 	return in_buffer_;
 }
 
+const std::string& Connection::getOutBuffer() const
+{
+	return out_buffer_;
+}
+
 int Connection::getFd() const
 {
 	return fd_;
@@ -101,7 +108,6 @@ void Connection::handleReadEvent()
 	{
 		return;
 	}
-
 	bytes_read = recv(fd_, buffer, READ_CHUNK, 0);
 	if (bytes_read <= 0)
 	{
@@ -114,6 +120,27 @@ void Connection::handleReadEvent()
 
 void Connection::handleWriteEvent()
 {
+	ssize_t bytes_sent = 0;
+
+	if (fd_ < 0)
+	{
+		return;
+	}
+	if (out_buffer_.empty())
+	{
+		return;
+	}
+	bytes_sent = send(fd_, &out_buffer_[0], out_buffer_.size(), 0);
+	if (bytes_sent <= 0)
+	{
+		closeConnection();
+		return;
+	}
+	out_buffer_.erase(0, static_cast<std::string::size_type>(bytes_sent));
+	if (out_buffer_.empty())
+	{
+		reactor_->updateEvents(fd_, READ);
+	}
 }
 
 void Connection::handleTimeout()
@@ -122,7 +149,20 @@ void Connection::handleTimeout()
 
 bool Connection::wantsWrite() const
 {
-	return keep_alive_;
+	return !out_buffer_.empty();
+}
+
+void Connection::queueOutput(const std::string& out_buffer)
+{
+	if (out_buffer.empty())
+	{
+		return;
+	}
+	out_buffer_ += out_buffer;
+	if (fd_ >= 0)
+	{
+		reactor_->updateEvents(fd_, READ_WRITE);
+	}
 }
 
 void Connection::processRequest()
