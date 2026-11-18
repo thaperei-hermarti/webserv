@@ -399,3 +399,23 @@ TEST(HttpRequestParserTest, OversizedContentLengthReportsPayloadTooLarge)
 	EXPECT_FALSE(parser.isComplete());
 	EXPECT_EQ(413, parser.errorStatus());
 }
+
+// Scenario: a request arrives as headers first, body second.
+//   Given : a POST with Content-Length: 5 whose headers are fed alone
+//   When  : the body arrives in a second feed() call
+//   Then  : consumed() accumulates both feeds instead of only the last one
+TEST(HttpRequestParserTest, ConsumedAccumulatesAcrossFeeds)
+{
+	HttpRequestParser parser(1024);
+
+	const char* headers = "POST /upload HTTP/1.1\r\nHost: localhost\r\n"
+						  "Content-Length: 5\r\n\r\n";
+	parser.feed(headers, std::strlen(headers));
+	ASSERT_FALSE(parser.isComplete());
+	EXPECT_EQ(std::strlen(headers), parser.consumed());
+
+	parser.feed("hello", 5);
+
+	ASSERT_TRUE(parser.isComplete());
+	EXPECT_EQ(std::strlen(headers) + 5, parser.consumed());
+}

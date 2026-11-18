@@ -39,6 +39,9 @@ class HttpRequestParser
 	bool isComplete() const;
 	bool isError() const;
 	HttpRequest& getRequest();
+	std::size_t consumed() const;
+	void reset();
+	int errorStatus() const;
 
   private:
 	void parseRequestLine();
@@ -49,7 +52,9 @@ class HttpRequestParser
 	std::string buffer_;
 	std::size_t cursor_;
 	std::size_t body_remaining_;
+	std::size_t consumed_;
 	bool chunked_;
+	int error_status_;
 
 	ParseState state_;
 	std::size_t max_body_size_;
