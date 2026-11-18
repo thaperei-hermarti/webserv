@@ -335,3 +335,284 @@ TEST(HttpRequestParserTest, UnknownMethodParsesFine)
 	EXPECT_FALSE(parser.isError());
 	EXPECT_EQ(parser.getRequest().getMethod(), "PATCH");
 }
+
+// Scenario: the parser reports how many input bytes the completed request used.
+//   Given : a POST with a 5-byte Content-Length body
+//   When  : the whole request is fed and reaches DONE
+//   Then  : consumed() equals the full request length, body included
+TEST(HttpRequestParserTest, ConsumedReportsCompletedRequestLength)
+{
+	HttpRequestParser parser(1024);
+
+	const char* request = "POST /upload HTTP/1.1\r\nHost: localhost\r\n"
+						  "Content-Length: 5\r\n\r\nhello";
+	parser.feed(request, std::strlen(request));
+
+	ASSERT_TRUE(parser.isComplete());
+	EXPECT_EQ(std::strlen(request), parser.consumed());
+}
+
+// Scenario: a parser is reused for the next request on the same connection.
+//   Given : a completed GET, then reset()
+//   When  : a different POST is fed
+//   Then  : no state from the first request survives; the second parses fully
+TEST(HttpRequestParserTest, ResetAllowsParsingASecondRequest)
+{
+	HttpRequestParser parser(1024);
+
+	const char* first = "GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n";
+	parser.feed(first, std::strlen(first));
+	ASSERT_TRUE(parser.isComplete());
+	ASSERT_EQ(std::strlen(first), parser.consumed());
+
+	parser.reset();
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_FALSE(parser.isError());
+	EXPECT_EQ(static_cast<std::size_t>(0), parser.consumed());
+
+	const char* second = "POST /second HTTP/1.1\r\nHost: localhost\r\n"
+						 "Content-Length: 4\r\n\r\nbody";
+	parser.feed(second, std::strlen(second));
+
+	EXPECT_TRUE(parser.isComplete());
+	EXPECT_FALSE(parser.isError());
+	HttpRequest& req = parser.getRequest();
+	EXPECT_EQ(req.getMethod(), "POST");
+	EXPECT_EQ(req.getUri(), "/second");
+	EXPECT_EQ(req.getBody(), "body");
+	EXPECT_EQ(std::strlen(second), parser.consumed());
+}
+
+// Scenario: a Content-Length body above the configured limit is rejected.
+//   Given : max_body_size = 4 and Content-Length: 5
+//   When  : the headers are parsed
+//   Then  : the parser is in error and reports 413 (Payload Too Large)
+TEST(HttpRequestParserTest, OversizedContentLengthReportsPayloadTooLarge)
+{
+	HttpRequestParser parser(4);
+
+	const char* request =
+		"GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhello";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(413, parser.errorStatus());
+}
+
+// Scenario: a chunk payload is split across feed() calls.
+//   Given : the chunk-size line and only part of "hello" in the first feed
+//   When  : the remaining payload and terminator arrive in the second feed
+//   Then  : the parser reaches DONE with the complete chunk body
+TEST(HttpRequestParserTest, ChunkedBodySplitMidPayloadIsUnchunked)
+{
+	HttpRequestParser parser(1024);
+
+	const char* first = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						"Transfer-Encoding: chunked\r\n\r\n"
+						"5\r\nhe";
+	parser.feed(first, std::strlen(first));
+	ASSERT_FALSE(parser.isComplete());
+	ASSERT_FALSE(parser.isError());
+	EXPECT_EQ("", parser.getRequest().getBody());
+
+	const char* second = "llo\r\n0\r\n\r\n";
+	parser.feed(second, std::strlen(second));
+
+	EXPECT_TRUE(parser.isComplete());
+	EXPECT_FALSE(parser.isError());
+	EXPECT_EQ("hello", parser.getRequest().getBody());
+}
+
+// Scenario: the trailing CRLF after chunk data is split across feeds.
+//   Given : a complete chunk payload without its trailing CRLF
+//   When  : the CRLF and terminator arrive in the second feed
+//   Then  : the parser reaches DONE with the complete chunk body
+TEST(HttpRequestParserTest, ChunkedBodySplitBeforeTrailingCrlfIsUnchunked)
+{
+	HttpRequestParser parser(1024);
+
+	const char* first = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						"Transfer-Encoding: chunked\r\n\r\n"
+						"5\r\nhello";
+	parser.feed(first, std::strlen(first));
+	ASSERT_FALSE(parser.isComplete());
+	ASSERT_FALSE(parser.isError());
+
+	const char* second = "\r\n0\r\n\r\n";
+	parser.feed(second, std::strlen(second));
+
+	EXPECT_TRUE(parser.isComplete());
+	EXPECT_FALSE(parser.isError());
+	EXPECT_EQ("hello", parser.getRequest().getBody());
+}
+
+// Scenario: the terminating 0 chunk is split across feed() calls.
+//   Given : "0\r\n" in the first feed and only the final CRLF in the second
+//   When  : both feeds are parsed
+//   Then  : the parser reaches DONE with the already-decoded body
+TEST(HttpRequestParserTest, ChunkedTerminatorSplitAcrossFeedsIsComplete)
+{
+	HttpRequestParser parser(1024);
+
+	const char* first = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						"Transfer-Encoding: chunked\r\n\r\n"
+						"5\r\nhello\r\n0\r\n";
+	parser.feed(first, std::strlen(first));
+	ASSERT_FALSE(parser.isComplete());
+	ASSERT_FALSE(parser.isError());
+	EXPECT_EQ("hello", parser.getRequest().getBody());
+
+	const char* second = "\r\n";
+	parser.feed(second, std::strlen(second));
+
+	EXPECT_TRUE(parser.isComplete());
+	EXPECT_FALSE(parser.isError());
+	EXPECT_EQ("hello", parser.getRequest().getBody());
+}
+
+// Scenario: every boundary of a chunked request is split.
+//   Given : a chunked request fed one byte at a time
+//   When  : feed() is called once per byte
+//   Then  : the parser never errors and reaches DONE with the full body
+TEST(HttpRequestParserTest, ChunkedRequestParsesByteByByte)
+{
+	HttpRequestParser parser(1024);
+
+	const char* request = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						  "Transfer-Encoding: chunked\r\n\r\n"
+						  "5\r\nhello\r\n0\r\n\r\n";
+	for (std::size_t i = 0; i < std::strlen(request); ++i)
+	{
+		parser.feed(request + i, 1);
+		EXPECT_FALSE(parser.isError());
+	}
+
+	EXPECT_TRUE(parser.isComplete());
+	EXPECT_EQ("hello", parser.getRequest().getBody());
+}
+
+// Scenario: a request arrives as headers first, body second.
+//   Given : a POST with Content-Length: 5 whose headers are fed alone
+//   When  : the body arrives in a second feed() call
+//   Then  : consumed() accumulates both feeds instead of only the last one
+TEST(HttpRequestParserTest, ConsumedAccumulatesAcrossFeeds)
+{
+	HttpRequestParser parser(1024);
+
+	const char* headers = "POST /upload HTTP/1.1\r\nHost: localhost\r\n"
+						  "Content-Length: 5\r\n\r\n";
+	parser.feed(headers, std::strlen(headers));
+	ASSERT_FALSE(parser.isComplete());
+	EXPECT_EQ(std::strlen(headers), parser.consumed());
+
+	parser.feed("hello", 5);
+
+	ASSERT_TRUE(parser.isComplete());
+	EXPECT_EQ(std::strlen(headers) + 5, parser.consumed());
+}
+
+// Scenario: a chunked body exactly at the limit is accepted.
+//   Given : max_body_size = 5 and chunks "abc" + "de"
+//   When  : the whole request is fed
+//   Then  : the parser reaches DONE with the five decoded bytes
+TEST(HttpRequestParserTest, ChunkedBodyEqualToMaxIsAccepted)
+{
+	HttpRequestParser parser(5);
+
+	const char* request = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						  "Transfer-Encoding: chunked\r\n\r\n"
+						  "3\r\nabc\r\n2\r\nde\r\n0\r\n\r\n";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isComplete());
+	EXPECT_FALSE(parser.isError());
+	EXPECT_EQ("abcde", parser.getRequest().getBody());
+}
+
+// Scenario: a single chunk above the limit is rejected.
+//   Given : max_body_size = 4 and one chunk "hello"
+//   When  : the whole request is fed
+//   Then  : the parser errors with 413 and stores no body bytes
+TEST(HttpRequestParserTest, ChunkedBodyAboveMaxReportsPayloadTooLarge)
+{
+	HttpRequestParser parser(4);
+
+	const char* request = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						  "Transfer-Encoding: chunked\r\n\r\n"
+						  "5\r\nhello\r\n0\r\n\r\n";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(413, parser.errorStatus());
+	EXPECT_EQ("", parser.getRequest().getBody());
+}
+
+// Scenario: multiple chunks share one cumulative body limit.
+//   Given : max_body_size = 5 and chunks "abc" + "def"
+//   When  : the whole request is fed
+//   Then  : the second chunk trips 413 and only "abc" was decoded
+TEST(HttpRequestParserTest, ChunkedBodyLimitAccumulatesAcrossChunks)
+{
+	HttpRequestParser parser(5);
+
+	const char* request = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						  "Transfer-Encoding: chunked\r\n\r\n"
+						  "3\r\nabc\r\n3\r\ndef\r\n0\r\n\r\n";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(413, parser.errorStatus());
+	EXPECT_EQ("abc", parser.getRequest().getBody());
+}
+
+// Scenario: the cumulative limit survives a feed() boundary at the limit.
+//   Given : max_body_size = 5, first feed delivers "abc", second "de"
+//   When  : both feeds are parsed
+//   Then  : the parser reaches DONE with exactly five decoded bytes
+TEST(HttpRequestParserTest, ChunkedBodyLimitAccumulatesAcrossFeeds)
+{
+	HttpRequestParser parser(5);
+
+	const char* first = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						"Transfer-Encoding: chunked\r\n\r\n"
+						"3\r\nabc\r\n";
+	parser.feed(first, std::strlen(first));
+	ASSERT_FALSE(parser.isComplete());
+	ASSERT_FALSE(parser.isError());
+	EXPECT_EQ("abc", parser.getRequest().getBody());
+
+	const char* second = "2\r\nde\r\n0\r\n\r\n";
+	parser.feed(second, std::strlen(second));
+
+	EXPECT_TRUE(parser.isComplete());
+	EXPECT_FALSE(parser.isError());
+	EXPECT_EQ("abcde", parser.getRequest().getBody());
+}
+
+// Scenario: the cumulative limit is enforced across feed() calls.
+//   Given : max_body_size = 5, first feed delivers "abc", second "def"
+//   When  : both feeds are parsed
+//   Then  : the second feed trips 413 and only "abc" remains decoded
+TEST(HttpRequestParserTest,
+	 ChunkedBodyAboveMaxAcrossFeedsReportsPayloadTooLarge)
+{
+	HttpRequestParser parser(5);
+
+	const char* first = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						"Transfer-Encoding: chunked\r\n\r\n"
+						"3\r\nabc\r\n";
+	parser.feed(first, std::strlen(first));
+	ASSERT_FALSE(parser.isComplete());
+	ASSERT_FALSE(parser.isError());
+
+	const char* second = "3\r\ndef\r\n0\r\n\r\n";
+	parser.feed(second, std::strlen(second));
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(413, parser.errorStatus());
+	EXPECT_EQ("abc", parser.getRequest().getBody());
+}

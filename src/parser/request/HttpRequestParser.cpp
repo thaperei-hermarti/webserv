@@ -38,8 +38,9 @@ static std::size_t hexValue(char c)
 }
 
 HttpRequestParser::HttpRequestParser(std::size_t max_body_size)
-	: buffer_(), cursor_(0), body_remaining_(0), chunked_(false),
-	  state_(REQUEST_LINE), max_body_size_(max_body_size), request_()
+	: buffer_(), cursor_(0), body_remaining_(0), consumed_(0), chunked_(false),
+	  error_status_(400), state_(REQUEST_LINE), max_body_size_(max_body_size),
+	  request_()
 {
 }
 
@@ -49,7 +50,8 @@ HttpRequestParser::~HttpRequestParser()
 
 HttpRequestParser::HttpRequestParser(const HttpRequestParser& other)
 	: buffer_(other.buffer_), cursor_(other.cursor_),
-	  body_remaining_(other.body_remaining_), chunked_(other.chunked_),
+	  body_remaining_(other.body_remaining_), consumed_(other.consumed_),
+	  chunked_(other.chunked_), error_status_(other.error_status_),
 	  state_(other.state_), max_body_size_(other.max_body_size_),
 	  request_(other.request_)
 {
@@ -62,7 +64,9 @@ HttpRequestParser& HttpRequestParser::operator=(const HttpRequestParser& other)
 		buffer_ = other.buffer_;
 		cursor_ = other.cursor_;
 		body_remaining_ = other.body_remaining_;
+		consumed_ = other.consumed_;
 		chunked_ = other.chunked_;
+		error_status_ = other.error_status_;
 		state_ = other.state_;
 		max_body_size_ = other.max_body_size_;
 		request_ = other.request_;
@@ -114,6 +118,7 @@ void HttpRequestParser::feed(const char* data, std::size_t len)
 	}
 	if (cursor_ > 0)
 	{
+		consumed_ += cursor_;
 		buffer_.erase(0, cursor_);
 		cursor_ = 0;
 	}
@@ -222,6 +227,7 @@ void HttpRequestParser::parseHeaders()
 		}
 		if (length > max_body_size_)
 		{
+			error_status_ = 413;
 			state_ = ERROR;
 			return;
 		}
@@ -284,32 +290,61 @@ void HttpRequestParser::unchunkBody()
 		state_ = ERROR;
 		return;
 	}
-	cursor_ = line_end + 2;
+	if (size != 0 && size > max_body_size_ - request_.getBody().size())
+	{
+		error_status_ = 413;
+		state_ = ERROR;
+		return;
+	}
+	const std::size_t data_start = line_end + 2;
+	const std::size_t available = buffer_.size() - data_start;
 	if (size == 0)
 	{
-		if (buffer_.size() - cursor_ < 2)
+		if (available < 2)
 		{
 			return;
 		}
-		if (buffer_[cursor_] != '\r' || buffer_[cursor_ + 1] != '\n')
+		if (buffer_[data_start] != '\r' || buffer_[data_start + 1] != '\n')
 		{
 			state_ = ERROR;
 			return;
 		}
-		cursor_ += 2;
+		cursor_ = data_start + 2;
 		state_ = DONE;
 		return;
 	}
-	if (buffer_.size() - cursor_ < size + 2)
+	if (size > available || available - size < 2)
 	{
 		return;
 	}
-	request_.setBody(request_.getBody() + buffer_.substr(cursor_, size));
-	cursor_ += size;
-	if (buffer_[cursor_] != '\r' || buffer_[cursor_ + 1] != '\n')
+	if (buffer_[data_start + size] != '\r' ||
+		buffer_[data_start + size + 1] != '\n')
 	{
 		state_ = ERROR;
 		return;
 	}
-	cursor_ += 2;
+	request_.setBody(request_.getBody() + buffer_.substr(data_start, size));
+	cursor_ = data_start + size + 2;
+}
+
+std::size_t HttpRequestParser::consumed() const
+{
+	return consumed_;
+}
+
+void HttpRequestParser::reset()
+{
+	buffer_.clear();
+	cursor_ = 0;
+	body_remaining_ = 0;
+	chunked_ = false;
+	state_ = REQUEST_LINE;
+	request_ = HttpRequest();
+	consumed_ = 0;
+	error_status_ = 400;
+}
+
+int HttpRequestParser::errorStatus() const
+{
+	return error_status_;
 }

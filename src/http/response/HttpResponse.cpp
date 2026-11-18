@@ -46,6 +46,11 @@ void HttpResponse::setStatus(int status_code, const std::string& status_message)
 	status_message_ = status_message;
 }
 
+int HttpResponse::getStatusCode() const
+{
+	return status_code_;
+}
+
 void HttpResponse::setHeader(const std::string& name, const std::string& value)
 {
 	headers_[name] = value;

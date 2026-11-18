@@ -12,6 +12,7 @@
 
 #include "server/Connection.hpp"
 
+#include "http/response/HttpResponse.hpp"
 #include "server/EventType.hpp"
 #include "server/ConnState.hpp"
 #include "server/Reactor.hpp"
@@ -28,12 +29,14 @@ Connection::Connection(int fd, ServerConfig& config, Reactor& reactor)
 	: fd_(fd), state_(READING_HEADERS),
 	  request_parser_(config.getClientMaxBodySize()), current_request_(NULL),
 	  current_response_(NULL), server_config_(config), reactor_(&reactor),
-	  cgi_handler_(NULL), last_activity_(time(NULL)), keep_alive_(false)
+	  router_(), cgi_handler_(NULL), last_activity_(time(NULL)),
+	  keep_alive_(false)
 {
 }
 
 Connection::~Connection()
 {
+	delete current_response_;
 	delete cgi_handler_;
 }
 
@@ -41,10 +44,12 @@ Connection::Connection(const Connection& other)
 	: fd_(other.fd_), state_(other.state_), in_buffer_(other.in_buffer_),
 	  out_buffer_(other.out_buffer_), request_parser_(other.request_parser_),
 	  current_request_(other.current_request_),
-	  current_response_(other.current_response_),
+	  current_response_(other.current_response_
+							? new HttpResponse(*other.current_response_)
+							: NULL),
 	  server_config_(other.server_config_), reactor_(other.reactor_),
-	  cgi_handler_(other.cgi_handler_), last_activity_(other.last_activity_),
-	  keep_alive_(other.keep_alive_)
+	  router_(other.router_), cgi_handler_(other.cgi_handler_),
+	  last_activity_(other.last_activity_), keep_alive_(other.keep_alive_)
 {
 }
 
@@ -58,8 +63,14 @@ Connection& Connection::operator=(const Connection& other)
 		out_buffer_ = other.out_buffer_;
 		request_parser_ = other.request_parser_;
 		current_request_ = other.current_request_;
-		current_response_ = other.current_response_;
+		delete current_response_;
+		current_response_ = NULL;
+		if (other.current_response_)
+		{
+			current_response_ = new HttpResponse(*other.current_response_);
+		}
 		reactor_ = other.reactor_;
+		router_ = other.router_;
 		cgi_handler_ = other.cgi_handler_;
 		last_activity_ = other.last_activity_;
 		keep_alive_ = other.keep_alive_;
@@ -85,6 +96,11 @@ int Connection::getFd() const
 ConnState Connection::getState() const
 {
 	return state_;
+}
+
+const HttpResponse* Connection::getCurrentResponse() const
+{
+	return current_response_;
 }
 
 void Connection::closeConnection()
@@ -118,6 +134,7 @@ void Connection::handleReadEvent()
 	std::cout << bytes_read << '\n' << std::flush;
 	in_buffer_.append(buffer, bytes_read);
 	last_activity_ = time(NULL);
+	processRequest();
 }
 
 void Connection::handleWriteEvent()
@@ -179,6 +196,38 @@ void Connection::queueOutput(const std::string& out_buffer)
 
 void Connection::processRequest()
 {
+	if (in_buffer_.empty())
+	{
+		return;
+	}
+
+	request_parser_.reset();
+	request_parser_.feed(&in_buffer_[0], in_buffer_.size());
+
+	if (request_parser_.isError())
+	{
+		const int status = request_parser_.errorStatus();
+		HttpResponse* response = new HttpResponse();
+		response->setStatus(
+			status, status == 413 ? "Payload Too Large" : "Bad Request");
+		delete current_response_;
+		current_response_ = response;
+		in_buffer_.clear();
+		request_parser_.reset();
+		return;
+	}
+
+	if (!request_parser_.isComplete())
+	{
+		return;
+	}
+
+	HttpResponse* response = new HttpResponse(
+		router_.route(request_parser_.getRequest(), server_config_));
+	delete current_response_;
+	current_response_ = response;
+	in_buffer_.erase(0, request_parser_.consumed());
+	request_parser_.reset();
 }
 
 void Connection::sendResponse(HttpResponse& response)

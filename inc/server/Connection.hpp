@@ -19,6 +19,7 @@
 #include "parser/request/HttpRequestParser.hpp"
 #include "server/ConnState.hpp"
 #include "server/IEventHandler.hpp"
+#include "server/Router.hpp"
 
 class CgiHandler;
 class HttpRequest;
@@ -38,6 +39,7 @@ class Connection : public IEventHandler
 	const std::string& getOutBuffer() const;
 	int getFd() const;
 	ConnState getState() const;
+	const HttpResponse* getCurrentResponse() const;
 	void handleReadEvent();
 	void handleWriteEvent();
 	void handleTimeout();
@@ -59,6 +61,7 @@ class Connection : public IEventHandler
 	HttpResponse* current_response_;
 	ServerConfig& server_config_;
 	Reactor* reactor_;
+	Router router_;
 	CgiHandler* cgi_handler_;
 	time_t last_activity_;
 	bool keep_alive_;
