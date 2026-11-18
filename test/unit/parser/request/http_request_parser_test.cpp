@@ -419,3 +419,108 @@ TEST(HttpRequestParserTest, ConsumedAccumulatesAcrossFeeds)
 	ASSERT_TRUE(parser.isComplete());
 	EXPECT_EQ(std::strlen(headers) + 5, parser.consumed());
 }
+
+// Scenario: a chunked body exactly at the limit is accepted.
+//   Given : max_body_size = 5 and chunks "abc" + "de"
+//   When  : the whole request is fed
+//   Then  : the parser reaches DONE with the five decoded bytes
+TEST(HttpRequestParserTest, ChunkedBodyEqualToMaxIsAccepted)
+{
+	HttpRequestParser parser(5);
+
+	const char* request = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						  "Transfer-Encoding: chunked\r\n\r\n"
+						  "3\r\nabc\r\n2\r\nde\r\n0\r\n\r\n";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isComplete());
+	EXPECT_FALSE(parser.isError());
+	EXPECT_EQ("abcde", parser.getRequest().getBody());
+}
+
+// Scenario: a single chunk above the limit is rejected.
+//   Given : max_body_size = 4 and one chunk "hello"
+//   When  : the whole request is fed
+//   Then  : the parser errors with 413 and stores no body bytes
+TEST(HttpRequestParserTest, ChunkedBodyAboveMaxReportsPayloadTooLarge)
+{
+	HttpRequestParser parser(4);
+
+	const char* request = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						  "Transfer-Encoding: chunked\r\n\r\n"
+						  "5\r\nhello\r\n0\r\n\r\n";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(413, parser.errorStatus());
+	EXPECT_EQ("", parser.getRequest().getBody());
+}
+
+// Scenario: multiple chunks share one cumulative body limit.
+//   Given : max_body_size = 5 and chunks "abc" + "def"
+//   When  : the whole request is fed
+//   Then  : the second chunk trips 413 and only "abc" was decoded
+TEST(HttpRequestParserTest, ChunkedBodyLimitAccumulatesAcrossChunks)
+{
+	HttpRequestParser parser(5);
+
+	const char* request = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						  "Transfer-Encoding: chunked\r\n\r\n"
+						  "3\r\nabc\r\n3\r\ndef\r\n0\r\n\r\n";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(413, parser.errorStatus());
+	EXPECT_EQ("abc", parser.getRequest().getBody());
+}
+
+// Scenario: the cumulative limit survives a feed() boundary at the limit.
+//   Given : max_body_size = 5, first feed delivers "abc", second "de"
+//   When  : both feeds are parsed
+//   Then  : the parser reaches DONE with exactly five decoded bytes
+TEST(HttpRequestParserTest, ChunkedBodyLimitAccumulatesAcrossFeeds)
+{
+	HttpRequestParser parser(5);
+
+	const char* first = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						"Transfer-Encoding: chunked\r\n\r\n"
+						"3\r\nabc\r\n";
+	parser.feed(first, std::strlen(first));
+	ASSERT_FALSE(parser.isComplete());
+	ASSERT_FALSE(parser.isError());
+	EXPECT_EQ("abc", parser.getRequest().getBody());
+
+	const char* second = "2\r\nde\r\n0\r\n\r\n";
+	parser.feed(second, std::strlen(second));
+
+	EXPECT_TRUE(parser.isComplete());
+	EXPECT_FALSE(parser.isError());
+	EXPECT_EQ("abcde", parser.getRequest().getBody());
+}
+
+// Scenario: the cumulative limit is enforced across feed() calls.
+//   Given : max_body_size = 5, first feed delivers "abc", second "def"
+//   When  : both feeds are parsed
+//   Then  : the second feed trips 413 and only "abc" remains decoded
+TEST(HttpRequestParserTest,
+	 ChunkedBodyAboveMaxAcrossFeedsReportsPayloadTooLarge)
+{
+	HttpRequestParser parser(5);
+
+	const char* first = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						"Transfer-Encoding: chunked\r\n\r\n"
+						"3\r\nabc\r\n";
+	parser.feed(first, std::strlen(first));
+	ASSERT_FALSE(parser.isComplete());
+	ASSERT_FALSE(parser.isError());
+
+	const char* second = "3\r\ndef\r\n0\r\n\r\n";
+	parser.feed(second, std::strlen(second));
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(413, parser.errorStatus());
+	EXPECT_EQ("abc", parser.getRequest().getBody());
+}
