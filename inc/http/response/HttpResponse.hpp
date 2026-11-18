@@ -27,6 +27,7 @@ class HttpResponse
 	void setStatus(int status_code, const std::string& status_message);
 	void setHeader(const std::string& name, const std::string& value);
 	void setBody(const std::string& body);
+	int getStatusCode() const;
 	const std::string& toString() const;
 
   private:

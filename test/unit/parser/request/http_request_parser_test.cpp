@@ -335,3 +335,87 @@ TEST(HttpRequestParserTest, UnknownMethodParsesFine)
 	EXPECT_FALSE(parser.isError());
 	EXPECT_EQ(parser.getRequest().getMethod(), "PATCH");
 }
+
+// Scenario: the parser reports how many input bytes the completed request used.
+//   Given : a POST with a 5-byte Content-Length body
+//   When  : the whole request is fed and reaches DONE
+//   Then  : consumed() equals the full request length, body included
+TEST(HttpRequestParserTest, ConsumedReportsCompletedRequestLength)
+{
+	HttpRequestParser parser(1024);
+
+	const char* request = "POST /upload HTTP/1.1\r\nHost: localhost\r\n"
+						  "Content-Length: 5\r\n\r\nhello";
+	parser.feed(request, std::strlen(request));
+
+	ASSERT_TRUE(parser.isComplete());
+	EXPECT_EQ(std::strlen(request), parser.consumed());
+}
+
+// Scenario: a parser is reused for the next request on the same connection.
+//   Given : a completed GET, then reset()
+//   When  : a different POST is fed
+//   Then  : no state from the first request survives; the second parses fully
+TEST(HttpRequestParserTest, ResetAllowsParsingASecondRequest)
+{
+	HttpRequestParser parser(1024);
+
+	const char* first = "GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n";
+	parser.feed(first, std::strlen(first));
+	ASSERT_TRUE(parser.isComplete());
+	ASSERT_EQ(std::strlen(first), parser.consumed());
+
+	parser.reset();
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_FALSE(parser.isError());
+	EXPECT_EQ(static_cast<std::size_t>(0), parser.consumed());
+
+	const char* second = "POST /second HTTP/1.1\r\nHost: localhost\r\n"
+						 "Content-Length: 4\r\n\r\nbody";
+	parser.feed(second, std::strlen(second));
+
+	EXPECT_TRUE(parser.isComplete());
+	EXPECT_FALSE(parser.isError());
+	HttpRequest& req = parser.getRequest();
+	EXPECT_EQ(req.getMethod(), "POST");
+	EXPECT_EQ(req.getUri(), "/second");
+	EXPECT_EQ(req.getBody(), "body");
+	EXPECT_EQ(std::strlen(second), parser.consumed());
+}
+
+// Scenario: a Content-Length body above the configured limit is rejected.
+//   Given : max_body_size = 4 and Content-Length: 5
+//   When  : the headers are parsed
+//   Then  : the parser is in error and reports 413 (Payload Too Large)
+TEST(HttpRequestParserTest, OversizedContentLengthReportsPayloadTooLarge)
+{
+	HttpRequestParser parser(4);
+
+	const char* request =
+		"GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhello";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(413, parser.errorStatus());
+}
+
+// Scenario: a request arrives as headers first, body second.
+//   Given : a POST with Content-Length: 5 whose headers are fed alone
+//   When  : the body arrives in a second feed() call
+//   Then  : consumed() accumulates both feeds instead of only the last one
+TEST(HttpRequestParserTest, ConsumedAccumulatesAcrossFeeds)
+{
+	HttpRequestParser parser(1024);
+
+	const char* headers = "POST /upload HTTP/1.1\r\nHost: localhost\r\n"
+						  "Content-Length: 5\r\n\r\n";
+	parser.feed(headers, std::strlen(headers));
+	ASSERT_FALSE(parser.isComplete());
+	EXPECT_EQ(std::strlen(headers), parser.consumed());
+
+	parser.feed("hello", 5);
+
+	ASSERT_TRUE(parser.isComplete());
+	EXPECT_EQ(std::strlen(headers) + 5, parser.consumed());
+}
