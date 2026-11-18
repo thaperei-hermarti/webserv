@@ -296,34 +296,35 @@ void HttpRequestParser::unchunkBody()
 		state_ = ERROR;
 		return;
 	}
-	cursor_ = line_end + 2;
+	const std::size_t data_start = line_end + 2;
+	const std::size_t available = buffer_.size() - data_start;
 	if (size == 0)
 	{
-		if (buffer_.size() - cursor_ < 2)
+		if (available < 2)
 		{
 			return;
 		}
-		if (buffer_[cursor_] != '\r' || buffer_[cursor_ + 1] != '\n')
+		if (buffer_[data_start] != '\r' || buffer_[data_start + 1] != '\n')
 		{
 			state_ = ERROR;
 			return;
 		}
-		cursor_ += 2;
+		cursor_ = data_start + 2;
 		state_ = DONE;
 		return;
 	}
-	if (buffer_.size() - cursor_ < size + 2)
+	if (size > available || available - size < 2)
 	{
 		return;
 	}
-	request_.setBody(request_.getBody() + buffer_.substr(cursor_, size));
-	cursor_ += size;
-	if (buffer_[cursor_] != '\r' || buffer_[cursor_ + 1] != '\n')
+	if (buffer_[data_start + size] != '\r' ||
+		buffer_[data_start + size + 1] != '\n')
 	{
 		state_ = ERROR;
 		return;
 	}
-	cursor_ += 2;
+	request_.setBody(request_.getBody() + buffer_.substr(data_start, size));
+	cursor_ = data_start + size + 2;
 }
 
 std::size_t HttpRequestParser::consumed() const
