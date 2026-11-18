@@ -290,6 +290,12 @@ void HttpRequestParser::unchunkBody()
 		state_ = ERROR;
 		return;
 	}
+	if (size != 0 && size > max_body_size_ - request_.getBody().size())
+	{
+		error_status_ = 413;
+		state_ = ERROR;
+		return;
+	}
 	cursor_ = line_end + 2;
 	if (size == 0)
 	{
