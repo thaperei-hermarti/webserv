@@ -31,6 +31,7 @@ class Reactor
 	void unregisterHandler(int fd);
 	void updateEvents(int fd, EventType event_type);
 	int eventMask(int fd) const;
+	void sweepTimeouts(time_t now);
 	void run();
 
   private:

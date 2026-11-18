@@ -14,6 +14,7 @@
 #include "server/EventType.hpp"
 #include "server/IEventHandler.hpp"
 #include <cerrno>
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -115,10 +116,26 @@ int Reactor::eventMask(int fd) const
 	return it->second.events_;
 }
 
+void Reactor::sweepTimeouts(time_t now)
+{
+	std::map<int, HandlerEntry>::const_iterator it = handlers_.begin();
+
+	while (it != handlers_.end())
+	{
+		IEventHandler* handler = it->second.handler_;
+		it++;
+		if (handler->isTimedOut(now))
+		{
+			handler->handleTimeout();
+		}
+	}
+}
+
 void Reactor::run()
 {
 	while (true)
 	{
+		sweepTimeouts(time(NULL));
 		int active_fds = waitForEvents();
 		if (active_fds < 0)
 		{
@@ -139,7 +156,7 @@ void Reactor::run()
 int Reactor::waitForEvents()
 {
 	return epoll_wait(
-		epoll_fd_, &events_[0], static_cast<int>(events_.size()), -1);
+		epoll_fd_, &events_[0], static_cast<int>(events_.size()), 1000);
 }
 
 void Reactor::handleHangup(IEventHandler* handler)
