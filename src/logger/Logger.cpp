@@ -37,13 +37,17 @@ static const char* getLevelColor(Logger::Level level)
 
 void Logger::log(Level level, const std::string& message)
 {
-	const bool use_color = isatty(STDERR_FILENO) != 0;
-	if (use_color)
+	const bool USE_COLOR = isatty(STDERR_FILENO) != 0;
+	if (USE_COLOR)
+	{
 		std::cerr << getLevelColor(level);
+	}
 	std::cerr << "[" << getLevelName(level) << "]";
-	if (use_color)
+	if (USE_COLOR)
+	{
 		std::cerr << "\033[0m";
-	std::cerr << " " << message << std::endl;
+	}
+	std::cerr << " " << message << '\n';
 }
 
 void Logger::debug(const std::string& message)

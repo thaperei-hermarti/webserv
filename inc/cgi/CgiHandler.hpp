@@ -47,7 +47,7 @@ class CgiHandler : public IEventHandler, public IRequestHandler
 	std::vector<char*> toCharArray();
 
   private:
-	void execute(HttpRequest& request, LocationConfig& config);
+	bool execute(HttpRequest& request, LocationConfig& config);
 	static void closeFd(int& fd);
 	static std::string toUpperWithUnderscores(const std::string& str);
 	bool isDone() const;

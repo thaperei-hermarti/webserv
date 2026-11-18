@@ -20,8 +20,9 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <iostream>
+#include <cerrno>
 
-CgiHandler::CgiHandler() : pid_(-1), start_time_(NULL), is_done_(false)
+CgiHandler::CgiHandler() : pid_(-1), start_time_(0), is_done_(false)
 {
 	stdin_pipe_[0] = stdin_pipe_[1] = -1;
 	stdout_pipe_[0] = stdout_pipe_[1] = -1;
@@ -161,16 +162,23 @@ bool CgiHandler::wantsWrite() const
 HttpResponse CgiHandler::handle(HttpRequest& request, LocationConfig& config)
 {
 	input_buffer_ = request.getBody();
-	execute(request, config);
+	output_buffer_.clear();
+	is_done_ = false;
+	HttpResponse response;
+	if (!execute(request, config))
+	{
+		response.setStatus(500, "Internal Server Error");
+	}
 	//	if (reactor_ != NULL)
 	//	{
 	//		reactor_->registerHandler(stdin_pipe_[1], this, WRITE);
 	//		reactor_->registerHandler(stdout_pipe_[0], this, READ);
 	//	}
-	return HttpResponse();
+
+	return response;
 }
 
-void CgiHandler::execute(HttpRequest& request, LocationConfig& config)
+bool CgiHandler::execute(HttpRequest& request, LocationConfig& config)
 {
 	std::string path = request.getUri();
 	std::size_t query = path.find('?');
@@ -179,21 +187,21 @@ void CgiHandler::execute(HttpRequest& request, LocationConfig& config)
 	if (extension == std::string::npos)
 	{
 		Logger::warning("No extension");
-		return;
+		return false;
 	}
 	std::map<std::string, std::string>::const_iterator interpreter =
 		config.cgi_extensions_.find(path.substr(extension));
 	if (interpreter == config.cgi_extensions_.end())
 	{
 		Logger::warning("No interpreter for cgi");
-		return;
+		return false;
 	}
 	std::string script = config.root_ + path;
 	pid_ = fork();
 	if (pid_ < 0)
 	{
 		Logger::error("Forking process");
-		return;
+		return false;
 	}
 	if (pid_ == 0)
 	{
@@ -219,6 +227,7 @@ void CgiHandler::execute(HttpRequest& request, LocationConfig& config)
 	fcntl(stdin_pipe_[1], F_SETFL, flags | O_NONBLOCK);
 	flags = fcntl(stdout_pipe_[0], F_GETFL, 0);
 	fcntl(stdout_pipe_[0], F_SETFL, flags | O_NONBLOCK);
+	return true;
 }
 
 std::string CgiHandler::toUpperWithUnderscores(const std::string& str)
@@ -240,27 +249,30 @@ std::string CgiHandler::toUpperWithUnderscores(const std::string& str)
 void CgiHandler::buildEnv(HttpRequest& request, LocationConfig& config)
 {
 	env_.clear();
-	std::string uri = request.getUri();
-	std::size_t question_mark_ = uri.find('?');
+	const std::string& uri = request.getUri();
+	std::size_t question_mark = uri.find('?');
 	env_.push_back("REQUEST_METHOD=" + request.getMethod());
-	env_.push_back("QUERY_STRING=" + (question_mark_ != std::string::npos
-			? uri.substr(question_mark_ + 1) : ""));
+	env_.push_back("QUERY_STRING=" + (question_mark != std::string::npos
+										  ? uri.substr(question_mark + 1)
+										  : ""));
 	env_.push_back("SERVER_PROTOCOL=HTTP/1.1");
 	env_.push_back("SERVER_SOFTWARE=webserv/1.0");
 	env_.push_back("GATEWAY_INTERFACE=CGI/1.1");
 
-	std::size_t pos_path_info_ = uri.find('/', uri.find('.'));
-	std::string script_name_ = uri.substr(0, (pos_path_info_ != std::string::npos
-			? pos_path_info_ : question_mark_));
-	std::string path_info_("");
-	if (pos_path_info_ != std::string::npos)
+	std::size_t pos_path_info = uri.find('/', uri.find('.'));
+	std::string script_name = uri.substr(
+		0,
+		(pos_path_info != std::string::npos ? pos_path_info : question_mark));
+	std::string path_info;
+	if (pos_path_info != std::string::npos)
 	{
-		path_info_ = uri.substr(pos_path_info_, question_mark_ - pos_path_info_);
+		path_info = uri.substr(pos_path_info, question_mark - pos_path_info);
 	}
-	env_.push_back("PATH_INFO=" + path_info_);
-	env_.push_back("PATH_TRANSLATED=" + config.root_ + path_info_);
-	env_.push_back("SCRIPT_NAME=" + script_name_);
-	env_.push_back("SCRIPT_FILENAME=" + config.root_ + script_name_);
+	env_.push_back("PATH_INFO=" + path_info);
+	env_.push_back("PATH_TRANSLATED=" +
+				   (!path_info.empty() ? config.root_ + path_info : ""));
+	env_.push_back("SCRIPT_NAME=" + script_name);
+	env_.push_back("SCRIPT_FILENAME=" + config.root_ + script_name);
 
 	std::string host = request.getHeader("host");
 	std::size_t colon = host.find(':');
@@ -311,6 +323,7 @@ void CgiHandler::closeFd(int& fd)
 	}
 }
 
-bool CgiHandler::isDone() const {
+bool CgiHandler::isDone() const
+{
 	return is_done_;
 }
