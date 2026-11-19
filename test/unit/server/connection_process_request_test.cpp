@@ -163,7 +163,12 @@ class ConnectionProcessRequestTest : public ::testing::Test
 	Connection* connection_;
 };
 
-TEST_F(ConnectionProcessRequestTest, CompleteRequestStoresARoutedResponse)
+// Scenario: a complete request is routed successfully.
+//   Given : a valid GET request
+//   When  : the read event processes it
+//   Then  : the routed response is stored and its bytes are queued
+TEST_F(ConnectionProcessRequestTest,
+	   CompleteRequestStoresAndQueuesARoutedResponse)
 {
 	deliver(kSimpleGet);
 
@@ -171,8 +176,37 @@ TEST_F(ConnectionProcessRequestTest, CompleteRequestStoresARoutedResponse)
 	ASSERT_NE(nullptr, response);
 	EXPECT_EQ(200, response->getStatusCode());
 	EXPECT_TRUE(connection().getInBuffer().empty());
-	EXPECT_TRUE(connection().getOutBuffer().empty());
+	EXPECT_EQ(response->toString(), connection().getOutBuffer());
+	EXPECT_TRUE(connection().wantsWrite());
 	EXPECT_NE(-1, connection().getFd());
+}
+
+// Scenario: the queued response must be the byte-exact serialization.
+//   Given : a valid GET request routed to the default 200 response
+//   When  : the read event processes it
+//   Then  : out_buffer_ contains the complete status line, headers and blank line
+TEST_F(ConnectionProcessRequestTest,
+	   CompleteRequestQueuesExactSerializedResponse)
+{
+	deliver(kSimpleGet);
+
+	EXPECT_EQ("HTTP/1.1 200 OK\r\n"
+			  "Content-Length: 0\r\n"
+			  "\r\n",
+			  connection().getOutBuffer());
+}
+
+// Scenario: queued bytes must arm EPOLLOUT through queueOutput().
+//   Given : a registered connection waiting on READ
+//   When  : a complete request queues its response
+//   Then  : the reactor watches READ_WRITE, not READ only
+TEST_F(ConnectionProcessRequestTest, CompleteRequestArmsWriteInterest)
+{
+	reactor().registerHandler(&connection(), READ);
+
+	deliver(kSimpleGet);
+
+	EXPECT_EQ(EPOLLIN | EPOLLOUT, reactor().eventMask(connection().getFd()));
 }
 
 TEST_F(ConnectionProcessRequestTest, IncompleteRequestWaitsForMoreBytes)
@@ -194,6 +228,8 @@ TEST_F(ConnectionProcessRequestTest, PipelinedRequestLeavesTheRemainderBuffered)
 	ASSERT_NE(nullptr, response);
 	EXPECT_EQ(200, response->getStatusCode());
 	EXPECT_EQ(std::string(kSecondGet), connection().getInBuffer());
+	EXPECT_EQ(response->toString(), connection().getOutBuffer());
+	EXPECT_TRUE(connection().wantsWrite());
 }
 
 TEST_F(ConnectionProcessRequestTest,
@@ -208,7 +244,25 @@ TEST_F(ConnectionProcessRequestTest,
 	EXPECT_EQ(std::string(kThirdGet), connection().getInBuffer());
 }
 
-TEST_F(ConnectionProcessRequestTest, MalformedRequestLineStoresABadRequest)
+// Scenario: two responses are produced on separate read events.
+//   Given : a first request has already queued its serialized response
+//   When  : a second request is processed
+//   Then  : the second response is appended, not replacing the first
+TEST_F(ConnectionProcessRequestTest, SecondResponseAppendsToQueuedOutput)
+{
+	deliver(kSimpleGet);
+	const HttpResponse* first = connection().getCurrentResponse();
+	ASSERT_NE(nullptr, first);
+	const std::string first_bytes = first->toString();
+	ASSERT_EQ(first_bytes, connection().getOutBuffer());
+
+	deliver(kSecondGet);
+	const HttpResponse* second = connection().getCurrentResponse();
+	ASSERT_NE(nullptr, second);
+	EXPECT_EQ(first_bytes + second->toString(), connection().getOutBuffer());
+}
+
+TEST_F(ConnectionProcessRequestTest, MalformedRequestLineQueuesABadRequest)
 {
 	deliver("GET /\r\n\r\n");
 
@@ -216,22 +270,24 @@ TEST_F(ConnectionProcessRequestTest, MalformedRequestLineStoresABadRequest)
 	ASSERT_NE(nullptr, response);
 	EXPECT_EQ(400, response->getStatusCode());
 	EXPECT_TRUE(connection().getInBuffer().empty());
-	EXPECT_TRUE(connection().getOutBuffer().empty());
+	EXPECT_EQ(response->toString(), connection().getOutBuffer());
+	EXPECT_TRUE(connection().wantsWrite());
 	EXPECT_NE(-1, connection().getFd());
 }
 
-TEST_F(ConnectionProcessRequestTest, MissingHostStoresABadRequest)
+TEST_F(ConnectionProcessRequestTest, MissingHostQueuesABadRequest)
 {
 	deliver("GET / HTTP/1.1\r\n\r\n");
 
 	const HttpResponse* response = connection().getCurrentResponse();
 	ASSERT_NE(nullptr, response);
 	EXPECT_EQ(400, response->getStatusCode());
-	EXPECT_TRUE(connection().getOutBuffer().empty());
+	EXPECT_EQ(response->toString(), connection().getOutBuffer());
+	EXPECT_TRUE(connection().wantsWrite());
 	EXPECT_NE(-1, connection().getFd());
 }
 
-TEST_F(ConnectionProcessRequestTest, RequestWithBodyIsFullyConsumed)
+TEST_F(ConnectionProcessRequestTest, RequestWithBodyIsFullyConsumedAndQueued)
 {
 	const std::string request = "POST /submit HTTP/1.1\r\nHost: localhost\r\n"
 								"Content-Length: 4\r\n\r\nbody";
@@ -241,11 +297,12 @@ TEST_F(ConnectionProcessRequestTest, RequestWithBodyIsFullyConsumed)
 	ASSERT_NE(nullptr, response);
 	EXPECT_EQ(200, response->getStatusCode());
 	EXPECT_TRUE(connection().getInBuffer().empty());
-	EXPECT_TRUE(connection().getOutBuffer().empty());
+	EXPECT_EQ(response->toString(), connection().getOutBuffer());
+	EXPECT_TRUE(connection().wantsWrite());
 }
 
 TEST_F(ConnectionProcessRequestTest,
-	   BodyAboveTheConfiguredLimitStoresPayloadTooLarge)
+	   BodyAboveTheConfiguredLimitQueuesPayloadTooLarge)
 {
 	ServerConfig limited;
 	limited.client_max_body_size_ = 10;
@@ -264,6 +321,7 @@ TEST_F(ConnectionProcessRequestTest,
 	const HttpResponse* response = limited_connection.getCurrentResponse();
 	ASSERT_NE(nullptr, response);
 	EXPECT_EQ(413, response->getStatusCode());
-	EXPECT_TRUE(limited_connection.getOutBuffer().empty());
+	EXPECT_EQ(response->toString(), limited_connection.getOutBuffer());
+	EXPECT_TRUE(limited_connection.wantsWrite());
 	EXPECT_NE(-1, limited_connection.getFd());
 }
