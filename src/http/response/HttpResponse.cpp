@@ -29,8 +29,8 @@ static std::string toLower(const std::string& value)
 
 static bool containsLineBreak(const std::string& value)
 {
-	return value.find('\r') != std::string::npos
-		|| value.find('\n') != std::string::npos;
+	return value.find('\r') != std::string::npos ||
+		   value.find('\n') != std::string::npos;
 }
 
 HttpResponse::HttpResponse() : status_code_(200), status_message_("OK")
@@ -76,7 +76,8 @@ void HttpResponse::setHeader(const std::string& name, const std::string& value)
 {
 	const std::string lower_name = toLower(name);
 	for (std::map<std::string, std::string>::iterator it = headers_.begin();
-		 it != headers_.end(); ++it)
+		 it != headers_.end();
+		 ++it)
 	{
 		if (toLower(it->first) == lower_name)
 		{
@@ -96,10 +97,13 @@ void HttpResponse::setBody(const std::string& body)
 
 const std::string& HttpResponse::toString() const
 {
-	std::map<std::string, std::pair<std::string, std::string> > sorted_headers;
+	typedef std::pair<std::string, std::string> HeaderEntry;
+	typedef std::map<std::string, HeaderEntry> HeaderMap;
+	HeaderMap sorted_headers;
 	for (std::map<std::string, std::string>::const_iterator it =
 			 headers_.begin();
-		 it != headers_.end(); ++it)
+		 it != headers_.end();
+		 ++it)
 	{
 		if (!containsLineBreak(it->first) && !containsLineBreak(it->second))
 			sorted_headers[toLower(it->first)] =
@@ -109,10 +113,9 @@ const std::string& HttpResponse::toString() const
 	const bool informational = status_code_ >= 100 && status_code_ < 200;
 	const bool no_content = status_code_ == 204;
 	const bool not_modified = status_code_ == 304;
-	const bool body_allowed =
-		!informational && !no_content && !not_modified;
-	std::map<std::string, std::pair<std::string, std::string> >::const_iterator
-		content_length = sorted_headers.find("content-length");
+	const bool body_allowed = !informational && !no_content && !not_modified;
+	HeaderMap::const_iterator content_length =
+		sorted_headers.find("content-length");
 
 	std::ostringstream response;
 	response << "HTTP/1.1 " << status_code_;
@@ -142,13 +145,12 @@ const std::string& HttpResponse::toString() const
 				 << content_length->second.second << "\r\n";
 	}
 
-	for (std::map<std::string, std::pair<std::string, std::string> >::
-			 const_iterator it = sorted_headers.begin();
-		 it != sorted_headers.end(); ++it)
+	for (HeaderMap::const_iterator it = sorted_headers.begin();
+		 it != sorted_headers.end();
+		 ++it)
 	{
 		if (it->first != "content-length")
-			response << it->second.first << ": " << it->second.second
-					 << "\r\n";
+			response << it->second.first << ": " << it->second.second << "\r\n";
 	}
 	response << "\r\n";
 	if (body_allowed)
