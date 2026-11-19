@@ -214,6 +214,7 @@ void Connection::processRequest()
 		current_response_ = response;
 		in_buffer_.clear();
 		request_parser_.reset();
+		sendResponse(*current_response_);
 		return;
 	}
 
@@ -228,9 +229,10 @@ void Connection::processRequest()
 	current_response_ = response;
 	in_buffer_.erase(0, request_parser_.consumed());
 	request_parser_.reset();
+	sendResponse(*current_response_);
 }
 
 void Connection::sendResponse(HttpResponse& response)
 {
-	(void) response;
+	queueOutput(response.toString());
 }
