@@ -35,6 +35,7 @@ class HttpResponse
 	std::string status_message_;
 	std::map<std::string, std::string> headers_;
 	std::string body_;
+	mutable std::string serialized_response_;
 };
 
 #endif
