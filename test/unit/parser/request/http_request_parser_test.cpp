@@ -665,6 +665,45 @@ TEST(HttpRequestParserTest, ChunkedBodyAboveMaxReportsPayloadTooLarge)
 	EXPECT_EQ("", parser.getRequest().getBody());
 }
 
+// Scenario: the request line and empty header block arrive in separate feeds.
+//   Given : "GET / HTTP/1.0\r\n" then the terminating "\r\n"
+//   When  : both feeds are parsed
+//   Then  : the parser reaches DONE instead of waiting in HEADERS forever
+TEST(HttpRequestParserTest, EmptyHeaderBlockSplitAfterRequestLineIsComplete)
+{
+	HttpRequestParser parser(1024);
+
+	const char* request_line = "GET / HTTP/1.0\r\n";
+	parser.feed(request_line, std::strlen(request_line));
+	ASSERT_FALSE(parser.isComplete());
+	ASSERT_FALSE(parser.isError());
+
+	parser.feed("\r\n", 2);
+
+	EXPECT_TRUE(parser.isComplete());
+	EXPECT_FALSE(parser.isError());
+}
+
+// Scenario: split empty headers still enforce Host for HTTP/1.1.
+//   Given : "GET / HTTP/1.1\r\n" then the terminating "\r\n"
+//   When  : both feeds are parsed
+//   Then  : the parser reports 400 because Host is missing
+TEST(HttpRequestParserTest, EmptyHeaderBlockSplitStillRequiresHost)
+{
+	HttpRequestParser parser(1024);
+
+	const char* request_line = "GET / HTTP/1.1\r\n";
+	parser.feed(request_line, std::strlen(request_line));
+	ASSERT_FALSE(parser.isComplete());
+	ASSERT_FALSE(parser.isError());
+
+	parser.feed("\r\n", 2);
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(400, parser.errorStatus());
+}
+
 // Scenario: multiple chunks share one cumulative body limit.
 //   Given : max_body_size = 5 and chunks "abc" + "def"
 //   When  : the whole request is fed

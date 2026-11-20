@@ -12,6 +12,7 @@
 
 #include "parser/request/HttpRequestParser.hpp"
 #include <cctype>
+#include <cstddef>
 // trim to " Host " => "Host"
 static std::string trim(const std::string& str)
 {
@@ -139,6 +140,24 @@ HttpRequest& HttpRequestParser::getRequest()
 	return request_;
 }
 
+bool HttpRequestParser::isEmptyHeaderBlock() const
+{
+	if (buffer_.size() < cursor_ + 2)
+	{
+		return false;
+	}
+	if (buffer_[cursor_] != '\r' || buffer_[cursor_ + 1] != '\n')
+	{
+		return false;
+	}
+	if (cursor_ == 0)
+	{
+		return true;
+	}
+	return cursor_ >= 2 && buffer_[cursor_ - 2] == '\r' &&
+		   buffer_[cursor_ - 1] == '\n';
+}
+
 // 3 topkens; Extra spcace (void method) or missing token => ERROr;
 
 void HttpRequestParser::parseRequestLine()
@@ -146,6 +165,18 @@ void HttpRequestParser::parseRequestLine()
 	std::size_t end = buffer_.find("\r\n", cursor_);
 	if (end == std::string::npos)
 	{
+		if (consumed_ + buffer_.size() > MAX_HEADER_BYTES)
+		{
+			error_status_ = 400;
+			state_ = ERROR;
+			return;
+		}
+		return;
+	}
+	if (consumed_ + end + 2 > MAX_HEADER_BYTES)
+	{
+		error_status_ = 400;
+		state_ = ERROR;
 		return;
 	}
 	std::string line = buffer_.substr(cursor_, end - cursor_);
@@ -166,10 +197,14 @@ void HttpRequestParser::parseRequestLine()
 
 void HttpRequestParser::parseHeaders()
 {
-	if (cursor_ >= 2 && buffer_.size() >= cursor_ + 2 &&
-		buffer_[cursor_ - 2] == '\r' && buffer_[cursor_ - 1] == '\n' &&
-		buffer_[cursor_] == '\r' && buffer_[cursor_ + 1] == '\n')
+	if (isEmptyHeaderBlock())
 	{
+		if (consumed_ + cursor_ + 2 > MAX_HEADER_BYTES)
+		{
+			error_status_ = 400;
+			state_ = ERROR;
+			return;
+		}
 		cursor_ += 2;
 		if (request_.getVersion() == "HTTP/1.1" &&
 			request_.getHeader("host").empty())
@@ -183,6 +218,18 @@ void HttpRequestParser::parseHeaders()
 	std::size_t end = buffer_.find("\r\n\r\n", cursor_);
 	if (end == std::string::npos)
 	{
+		if (consumed_ + buffer_.size() > MAX_HEADER_BYTES)
+		{
+			error_status_ = 400;
+			state_ = ERROR;
+			return;
+		}
+		return;
+	}
+	if (consumed_ + end + 4 > MAX_HEADER_BYTES)
+	{
+		error_status_ = 400;
+		state_ = ERROR;
 		return;
 	}
 	std::size_t pos = cursor_;
