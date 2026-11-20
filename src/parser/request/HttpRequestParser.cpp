@@ -268,15 +268,19 @@ void HttpRequestParser::parseHeaders()
 			return;
 		}
 		std::size_t length = 0;
+		const std::size_t limit_quotient = max_body_size_ / 10;
+		const std::size_t limit_remainder = max_body_size_ % 10;
 		for (std::size_t i = 0; i < value.size(); ++i)
 		{
-			length = length * 10 + static_cast<std::size_t>(value[i] - '0');
-		}
-		if (length > max_body_size_)
-		{
-			error_status_ = 413;
-			state_ = ERROR;
-			return;
+			const std::size_t digit = static_cast<std::size_t>(value[i] - '0');
+			if (length > limit_quotient ||
+				(length == limit_quotient && digit > limit_remainder))
+			{
+				error_status_ = 413;
+				state_ = ERROR;
+				return;
+			}
+			length = (length * 10) + digit;
 		}
 		body_remaining_ = length;
 		if (length == 0)
@@ -320,6 +324,8 @@ void HttpRequestParser::unchunkBody()
 	std::string size_line = buffer_.substr(cursor_, line_end - cursor_);
 	std::size_t size = 0;
 	std::size_t i = 0;
+	const std::size_t limit_quotient = max_body_size_ / 16;
+	const std::size_t limit_remainder = max_body_size_ % 16;
 	for (; i < size_line.size(); ++i)
 	{
 		char c = size_line[i];
@@ -330,7 +336,15 @@ void HttpRequestParser::unchunkBody()
 			state_ = ERROR;
 			return;
 		}
-		size = size * 16 + hexValue(c);
+		const std::size_t digit = hexValue(c);
+		if (size > limit_quotient ||
+			(size == limit_quotient && digit > limit_remainder))
+		{
+			error_status_ = 413;
+			state_ = ERROR;
+			return;
+		}
+		size = (size * 16) + digit;
 	}
 	if (i == 0)
 	{
