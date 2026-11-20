@@ -12,6 +12,7 @@
 
 #include "parser/request/HttpRequestParser.hpp"
 #include <cctype>
+#include <cstddef>
 // trim to " Host " => "Host"
 static std::string trim(const std::string& str)
 {
@@ -139,6 +140,24 @@ HttpRequest& HttpRequestParser::getRequest()
 	return request_;
 }
 
+bool HttpRequestParser::isEmptyHeaderBlock() const
+{
+	if (buffer_.size() < cursor_ + 2)
+	{
+		return false;
+	}
+	if (buffer_[cursor_] != '\r' || buffer_[cursor_ + 1] != '\n')
+	{
+		return false;
+	}
+	if (cursor_ == 0)
+	{
+		return true;
+	}
+	return cursor_ >= 2 && buffer_[cursor_ - 2] == '\r' &&
+		   buffer_[cursor_ - 1] == '\n';
+}
+
 // 3 topkens; Extra spcace (void method) or missing token => ERROr;
 
 void HttpRequestParser::parseRequestLine()
@@ -146,6 +165,18 @@ void HttpRequestParser::parseRequestLine()
 	std::size_t end = buffer_.find("\r\n", cursor_);
 	if (end == std::string::npos)
 	{
+		if (consumed_ + buffer_.size() > MAX_HEADER_BYTES)
+		{
+			error_status_ = 400;
+			state_ = ERROR;
+			return;
+		}
+		return;
+	}
+	if (consumed_ + end + 2 > MAX_HEADER_BYTES)
+	{
+		error_status_ = 400;
+		state_ = ERROR;
 		return;
 	}
 	std::string line = buffer_.substr(cursor_, end - cursor_);
@@ -166,10 +197,14 @@ void HttpRequestParser::parseRequestLine()
 
 void HttpRequestParser::parseHeaders()
 {
-	if (cursor_ >= 2 && buffer_.size() >= cursor_ + 2 &&
-		buffer_[cursor_ - 2] == '\r' && buffer_[cursor_ - 1] == '\n' &&
-		buffer_[cursor_] == '\r' && buffer_[cursor_ + 1] == '\n')
+	if (isEmptyHeaderBlock())
 	{
+		if (consumed_ + cursor_ + 2 > MAX_HEADER_BYTES)
+		{
+			error_status_ = 400;
+			state_ = ERROR;
+			return;
+		}
 		cursor_ += 2;
 		if (request_.getVersion() == "HTTP/1.1" &&
 			request_.getHeader("host").empty())
@@ -183,6 +218,18 @@ void HttpRequestParser::parseHeaders()
 	std::size_t end = buffer_.find("\r\n\r\n", cursor_);
 	if (end == std::string::npos)
 	{
+		if (consumed_ + buffer_.size() > MAX_HEADER_BYTES)
+		{
+			error_status_ = 400;
+			state_ = ERROR;
+			return;
+		}
+		return;
+	}
+	if (consumed_ + end + 4 > MAX_HEADER_BYTES)
+	{
+		error_status_ = 400;
+		state_ = ERROR;
 		return;
 	}
 	std::size_t pos = cursor_;
@@ -221,15 +268,19 @@ void HttpRequestParser::parseHeaders()
 			return;
 		}
 		std::size_t length = 0;
+		const std::size_t limit_quotient = max_body_size_ / 10;
+		const std::size_t limit_remainder = max_body_size_ % 10;
 		for (std::size_t i = 0; i < value.size(); ++i)
 		{
-			length = length * 10 + static_cast<std::size_t>(value[i] - '0');
-		}
-		if (length > max_body_size_)
-		{
-			error_status_ = 413;
-			state_ = ERROR;
-			return;
+			const std::size_t digit = static_cast<std::size_t>(value[i] - '0');
+			if (length > limit_quotient ||
+				(length == limit_quotient && digit > limit_remainder))
+			{
+				error_status_ = 413;
+				state_ = ERROR;
+				return;
+			}
+			length = (length * 10) + digit;
 		}
 		body_remaining_ = length;
 		if (length == 0)
@@ -273,6 +324,8 @@ void HttpRequestParser::unchunkBody()
 	std::string size_line = buffer_.substr(cursor_, line_end - cursor_);
 	std::size_t size = 0;
 	std::size_t i = 0;
+	const std::size_t limit_quotient = max_body_size_ / 16;
+	const std::size_t limit_remainder = max_body_size_ % 16;
 	for (; i < size_line.size(); ++i)
 	{
 		char c = size_line[i];
@@ -283,7 +336,15 @@ void HttpRequestParser::unchunkBody()
 			state_ = ERROR;
 			return;
 		}
-		size = size * 16 + hexValue(c);
+		const std::size_t digit = hexValue(c);
+		if (size > limit_quotient ||
+			(size == limit_quotient && digit > limit_remainder))
+		{
+			error_status_ = 413;
+			state_ = ERROR;
+			return;
+		}
+		size = (size * 16) + digit;
 	}
 	if (i == 0)
 	{
