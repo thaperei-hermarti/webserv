@@ -14,6 +14,12 @@
 
 #include <cstring>
 #include <gtest/gtest.h>
+#include <string>
+
+namespace
+{
+const std::size_t kMaxHeaderBytes = 8192;
+}
 
 // Scenario: a complete, well-formed GET request arrives in a single feed() call.
 //   Given : "GET /index.html HTTP/1.1\r\nHost: localhost\r\n\r\n"
@@ -393,6 +399,116 @@ TEST(HttpRequestParserTest, OversizedContentLengthReportsPayloadTooLarge)
 
 	const char* request =
 		"GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhello";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(413, parser.errorStatus());
+}
+
+// Scenario: a request line larger than the header budget is rejected.
+//   Given : a URI padded beyond 8 KiB
+//   When  : the request is parsed
+//   Then  : the parser reports 400 instead of buffering unbounded input
+TEST(HttpRequestParserTest, OversizedRequestLineReportsBadRequest)
+{
+	HttpRequestParser parser(1024);
+
+	std::string request = "GET /" + std::string(kMaxHeaderBytes, 'a') +
+						  " HTTP/1.1\r\nHost: localhost\r\n\r\n";
+	parser.feed(request.data(), request.size());
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(400, parser.errorStatus());
+}
+
+// Scenario: a header block larger than the header budget is rejected.
+//   Given : a single header value padded beyond 8 KiB
+//   When  : the request is parsed
+//   Then  : the parser reports 400 instead of accepting the oversized header
+TEST(HttpRequestParserTest, OversizedHeaderBlockReportsBadRequest)
+{
+	HttpRequestParser parser(1024);
+
+	std::string request = "GET / HTTP/1.1\r\nHost: localhost\r\nX-Fill: ";
+	request += std::string(kMaxHeaderBytes, 'a');
+	request += "\r\n\r\n";
+	parser.feed(request.data(), request.size());
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(400, parser.errorStatus());
+}
+
+// Scenario: the header budget is cumulative across feed() calls.
+//   Given : a header value split into two feeds that together exceed 8 KiB
+//   When  : the second feed completes the header block
+//   Then  : the parser reports 400 instead of accepting the oversized header
+TEST(HttpRequestParserTest, OversizedHeaderAcrossFeedsReportsBadRequest)
+{
+	HttpRequestParser parser(1024);
+
+	std::string first = "GET / HTTP/1.1\r\nHost: localhost\r\nX-Fill: ";
+	first += std::string(5000, 'a');
+	parser.feed(first.data(), first.size());
+	ASSERT_FALSE(parser.isError());
+	ASSERT_FALSE(parser.isComplete());
+
+	std::string second(4000, 'b');
+	second += "\r\n\r\n";
+	parser.feed(second.data(), second.size());
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(400, parser.errorStatus());
+}
+
+// Scenario: an unterminated oversized header cannot grow the buffer forever.
+//   Given : a header value beyond 8 KiB with no terminating CRLFCRLF
+//   When  : the bytes are fed
+//   Then  : the parser reports 400 as soon as the budget is exceeded
+TEST(HttpRequestParserTest, UnterminatedOversizedHeaderReportsBadRequest)
+{
+	HttpRequestParser parser(1024);
+
+	std::string request = "GET / HTTP/1.1\r\nHost: localhost\r\nX-Fill: ";
+	request += std::string(kMaxHeaderBytes, 'a');
+	parser.feed(request.data(), request.size());
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(400, parser.errorStatus());
+}
+
+// Scenario: a Content-Length larger than SIZE_MAX must not wrap around.
+//   Given : 2^64 + 1 as Content-Length (wraps to 1 in unchecked size_t math)
+//   When  : the headers are parsed
+//   Then  : the parser rejects the oversized body with 413
+TEST(HttpRequestParserTest, OverflowingContentLengthReportsPayloadTooLarge)
+{
+	HttpRequestParser parser(1024);
+
+	const char* request = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						  "Content-Length: 18446744073709551617\r\n\r\n";
+	parser.feed(request, std::strlen(request));
+
+	EXPECT_TRUE(parser.isError());
+	EXPECT_FALSE(parser.isComplete());
+	EXPECT_EQ(413, parser.errorStatus());
+}
+
+// Scenario: a chunk size larger than SIZE_MAX must not wrap around.
+//   Given : 2^64 as a chunk size (wraps to 0 in unchecked size_t math)
+//   When  : the chunk-size line is parsed
+//   Then  : the parser rejects the oversized chunk with 413
+TEST(HttpRequestParserTest, OverflowingChunkSizeReportsPayloadTooLarge)
+{
+	HttpRequestParser parser(1024);
+
+	const char* request = "POST / HTTP/1.1\r\nHost: localhost\r\n"
+						  "Transfer-Encoding: chunked\r\n\r\n"
+						  "10000000000000000\r\n\r\n";
 	parser.feed(request, std::strlen(request));
 
 	EXPECT_TRUE(parser.isError());
