@@ -44,6 +44,8 @@ class HttpRequestParser
 	int errorStatus() const;
 
   private:
+	static const std::size_t MAX_HEADER_BYTES = 8192;
+	bool isEmptyHeaderBlock() const;
 	void parseRequestLine();
 	void parseHeaders();
 	void unchunkBody();
