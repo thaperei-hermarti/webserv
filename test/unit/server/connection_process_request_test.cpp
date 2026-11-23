@@ -130,6 +130,9 @@ class ConnectionProcessRequestTest : public ::testing::Test
 	{
 		ASSERT_TRUE(pair_.ok()) << std::strerror(errno);
 		ASSERT_TRUE(setNonBlocking(pair_.read_end())) << std::strerror(errno);
+		LocationConfig root;
+		root.path_ = "/";
+		config_.locations_.push_back(root);
 		connection_ = new Connection(pair_.read_end(), config_, reactor_);
 	}
 
