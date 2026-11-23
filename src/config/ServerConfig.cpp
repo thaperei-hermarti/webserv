@@ -12,6 +12,27 @@
 
 #include "config/ServerConfig.hpp"
 
+static std::string pathWithoutQuery(const std::string& uri)
+{
+	const std::size_t query = uri.find('?');
+	if (query == std::string::npos)
+	{
+		return uri;
+	}
+	return uri.substr(0, query);
+}
+
+static bool locationMatches(const std::string& path, const std::string& prefix)
+{
+	if (prefix.empty() || path.size() < prefix.size() ||
+		path.compare(0, prefix.size(), prefix) != 0)
+	{
+		return false;
+	}
+	return path.size() == prefix.size() || prefix[prefix.size() - 1] == '/' ||
+		   path[prefix.size()] == '/';
+}
+
 ServerConfig::ServerConfig()
 	: host_("localhost"), ports_(1, 80), index_file_(1, "index.html"),
 	  client_max_body_size_(1024 * 1024), idle_timeout_(30)
@@ -44,10 +65,23 @@ ServerConfig& ServerConfig::operator=(const ServerConfig& other)
 	return *this;
 }
 
-LocationConfig& ServerConfig::matchLocation(const std::string& uri)
+LocationConfig* ServerConfig::matchLocation(const std::string& uri)
 {
-	(void) uri;
-	return locations_.front();
+	const std::string path = pathWithoutQuery(uri);
+	LocationConfig* best = NULL;
+	for (std::size_t i = 0; i < locations_.size(); ++i)
+	{
+		LocationConfig& candidate = locations_[i];
+		if (!locationMatches(path, candidate.path_))
+		{
+			continue;
+		}
+		if (best == NULL || candidate.path_.size() > best->path_.size())
+		{
+			best = &candidate;
+		}
+	}
+	return best;
 }
 
 std::size_t ServerConfig::getClientMaxBodySize() const
