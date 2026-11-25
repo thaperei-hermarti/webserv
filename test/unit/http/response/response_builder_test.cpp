@@ -16,9 +16,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <unistd.h>
+
+#include "config/ServerConfig.hpp"
 
 namespace
 {
@@ -191,4 +194,192 @@ TEST(ResponseBuilderTest, BuildFromFileSetsServerHeader)
 			  ResponseBuilder::buildFromFile(dir.path("page.html"))
 				  .toString()
 				  .find("\r\nServer: webserv\r\n"));
+}
+
+// Scenario: no custom error page is configured.
+//   Given : a ServerConfig without a 404 error page
+//   When  : buildErrorResponse() builds the response
+//   Then  : the default cat page and standard headers are returned
+TEST(ResponseBuilderTest, BuildErrorResponseUsesDefaultCatPage)
+{
+	ServerConfig config;
+
+	HttpResponse response = ResponseBuilder::buildErrorResponse(404, config);
+	const std::string serialized = response.toString();
+
+	EXPECT_EQ(404, response.getStatusCode());
+	EXPECT_NE(std::string::npos, serialized.find("HTTP/1.1 404 Not Found\r\n"));
+	EXPECT_NE(std::string::npos,
+			  serialized.find("\r\nContent-Type: text/html\r\n"));
+	EXPECT_NE(std::string::npos, serialized.find("<h1>404 Not Found</h1>"));
+	EXPECT_NE(std::string::npos, serialized.find("/error_pages/404.jpg"));
+	EXPECT_EQ(std::string::npos, serialized.find("http.cat"));
+	EXPECT_NE(std::string::npos, serialized.find("\r\nDate: "));
+	EXPECT_NE(std::string::npos, serialized.find("\r\nServer: webserv\r\n"));
+}
+
+// Scenario: the fallback is a static HTML page.
+//   Given : a request with no configured error page
+//   When  : buildErrorResponse() builds the default page
+//   Then  : the response body is a complete styled website
+TEST(ResponseBuilderTest, BuildErrorResponseReturnsStandaloneHtmlPage)
+{
+	ServerConfig config;
+
+	const std::string serialized =
+		ResponseBuilder::buildErrorResponse(404, config).toString();
+
+	EXPECT_NE(std::string::npos, serialized.find("<!DOCTYPE html>"));
+	EXPECT_NE(std::string::npos, serialized.find("<meta name=\"viewport\""));
+	EXPECT_NE(std::string::npos, serialized.find("<style>"));
+	EXPECT_NE(std::string::npos, serialized.find("<h1>404 Not Found</h1>"));
+	EXPECT_NE(std::string::npos, serialized.find("Back to home"));
+	EXPECT_NE(std::string::npos, serialized.find("</html>"));
+}
+
+// Scenario: the fallback page is stored as a static file.
+//   Given : www/error_pages/404.html
+//   When  : buildErrorResponse() builds a 404 response
+//   Then  : the response body is exactly that static file
+TEST(ResponseBuilderTest, BuildErrorResponseLoadsStaticErrorPage)
+{
+	std::ifstream page("www/error_pages/404.html",
+					   std::ios::in | std::ios::binary);
+	ASSERT_TRUE(page.good());
+	std::ostringstream expected;
+	expected << page.rdbuf();
+
+	ServerConfig config;
+	const std::string serialized =
+		ResponseBuilder::buildErrorResponse(404, config).toString();
+	const std::size_t body_start = serialized.find("\r\n\r\n");
+
+	ASSERT_NE(std::string::npos, body_start);
+	EXPECT_EQ(expected.str(), serialized.substr(body_start + 4));
+}
+
+// Scenario: the default error pages ship with the server.
+//   Given : the static HTML files used by the fallback pages
+//   When  : the repository is inspected
+//   Then  : every required page is readable
+TEST(ResponseBuilderTest, DefaultErrorPagesShipWithServer)
+{
+	const char* PATHS[] = {"www/error_pages/400.html",
+						   "www/error_pages/403.html",
+						   "www/error_pages/404.html",
+						   "www/error_pages/405.html",
+						   "www/error_pages/413.html",
+						   "www/error_pages/500.html"};
+
+	for (std::size_t i = 0; i < sizeof(PATHS) / sizeof(PATHS[0]); ++i)
+	{
+		std::ifstream page(PATHS[i], std::ios::in | std::ios::binary);
+		EXPECT_TRUE(page.good()) << PATHS[i];
+	}
+}
+
+// Scenario: the default error images ship with the server.
+//   Given : the assets used by the fallback pages
+//   When  : the repository is inspected
+//   Then  : every required JPEG is readable
+TEST(ResponseBuilderTest, DefaultErrorImagesShipWithServer)
+{
+	const char* PATHS[] = {"www/error_pages/400.jpg",
+						   "www/error_pages/403.jpg",
+						   "www/error_pages/404.jpg",
+						   "www/error_pages/405.jpg",
+						   "www/error_pages/413.jpg",
+						   "www/error_pages/500.jpg"};
+
+	for (std::size_t i = 0; i < sizeof(PATHS) / sizeof(PATHS[0]); ++i)
+	{
+		std::ifstream image(PATHS[i], std::ios::in | std::ios::binary);
+		ASSERT_TRUE(image.good()) << PATHS[i];
+		unsigned char magic[2] = {0, 0};
+		image.read(reinterpret_cast<char*>(magic), 2);
+		EXPECT_EQ(0xFF, static_cast<int>(magic[0])) << PATHS[i];
+		EXPECT_EQ(0xD8, static_cast<int>(magic[1])) << PATHS[i];
+	}
+}
+
+// Scenario: the server must produce every required default error page.
+//   Given : codes 400, 403, 404, 405, 413 and 500
+//   When  : buildErrorResponse() builds each response
+//   Then  : each has its reason phrase and matching cat image
+TEST(ResponseBuilderTest, BuildErrorResponseCoversRequiredCodes)
+{
+	const struct ErrorCase
+	{
+		int code;
+		const char* reason;
+	} CASES[] = {{400, "Bad Request"},
+				 {403, "Forbidden"},
+				 {404, "Not Found"},
+				 {405, "Method Not Allowed"},
+				 {413, "Payload Too Large"},
+				 {500, "Internal Server Error"}};
+
+	for (std::size_t i = 0; i < sizeof(CASES) / sizeof(CASES[0]); ++i)
+	{
+		std::ostringstream code;
+		code << CASES[i].code;
+		const ServerConfig CONFIG;
+		HttpResponse response =
+			ResponseBuilder::buildErrorResponse(CASES[i].code, CONFIG);
+		const std::string serialized = response.toString();
+
+		EXPECT_EQ(CASES[i].code, response.getStatusCode());
+		EXPECT_NE(std::string::npos,
+				  serialized.find("HTTP/1.1 " + code.str() + " " +
+								  CASES[i].reason + "\r\n"));
+		EXPECT_NE(std::string::npos,
+				  serialized.find("/error_pages/" + code.str() + ".jpg"));
+		EXPECT_NE(
+			std::string::npos,
+			serialized.find("data-static-error-page=\"" + code.str() + "\""));
+		EXPECT_EQ(std::string::npos, serialized.find("http.cat"));
+	}
+}
+
+// Scenario: a custom error page is configured and readable.
+//   Given : a 404 mapping to an existing HTML file
+//   When  : buildErrorResponse() builds the response
+//   Then  : the custom body is served with the error status
+TEST(ResponseBuilderTest, BuildErrorResponseUsesConfiguredPage)
+{
+	TempDir dir;
+	ASSERT_TRUE(dir.ok());
+	ASSERT_TRUE(dir.write("404.html", "custom 404\n"));
+
+	ServerConfig config;
+	config.error_pages_[404] = dir.path("404.html");
+
+	HttpResponse response = ResponseBuilder::buildErrorResponse(404, config);
+	const std::string serialized = response.toString();
+
+	EXPECT_EQ(404, response.getStatusCode());
+	EXPECT_NE(std::string::npos, serialized.find("HTTP/1.1 404 Not Found\r\n"));
+	EXPECT_NE(std::string::npos,
+			  serialized.find("\r\nContent-Type: text/html\r\n"));
+	EXPECT_NE(std::string::npos, serialized.find("\r\n\r\ncustom 404\n"));
+}
+
+// Scenario: a configured error page cannot be read.
+//   Given : a 404 mapping to a missing file
+//   When  : buildErrorResponse() builds the response
+//   Then  : the default cat page is used instead
+TEST(ResponseBuilderTest, BuildErrorResponseFallsBackForMissingConfiguredPage)
+{
+	TempDir dir;
+	ASSERT_TRUE(dir.ok());
+
+	ServerConfig config;
+	config.error_pages_[404] = dir.path("missing.html");
+
+	HttpResponse response = ResponseBuilder::buildErrorResponse(404, config);
+	const std::string serialized = response.toString();
+
+	EXPECT_EQ(404, response.getStatusCode());
+	EXPECT_NE(std::string::npos, serialized.find("<h1>404 Not Found</h1>"));
+	EXPECT_NE(std::string::npos, serialized.find("/error_pages/404.jpg"));
 }
