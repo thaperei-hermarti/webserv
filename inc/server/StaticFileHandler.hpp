@@ -26,6 +26,8 @@ class StaticFileHandler : public IRequestHandler
 	StaticFileHandler& operator=(const StaticFileHandler& other);
 
 	HttpResponse handle(HttpRequest& request, LocationConfig& config);
+	static std::string resolvePath(const std::string& uri,
+								   const LocationConfig& config);
 
   private:
 	HttpResponse serveFile(const std::string& path);
