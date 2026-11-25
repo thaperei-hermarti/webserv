@@ -28,7 +28,7 @@ struct ServerConfig
 	ServerConfig(const ServerConfig& other);
 	ServerConfig& operator=(const ServerConfig& other);
 
-	LocationConfig& matchLocation(const std::string& uri);
+	LocationConfig* matchLocation(const std::string& uri);
 	std::size_t getClientMaxBodySize() const;
 
 	std::string host_;

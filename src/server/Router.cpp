@@ -12,6 +12,9 @@
 
 #include "server/Router.hpp"
 
+#include "config/ServerConfig.hpp"
+#include "http/request/HttpRequest.hpp"
+
 Router::Router()
 {
 }
@@ -33,9 +36,14 @@ Router& Router::operator=(const Router& other)
 
 HttpResponse Router::route(HttpRequest& request, ServerConfig& config)
 {
-	(void) request;
-	(void) config;
-	return HttpResponse();
+	LocationConfig* location = config.matchLocation(request.getUri());
+	if (location == NULL)
+	{
+		HttpResponse response;
+		response.setStatus(404, "Not Found");
+		return response;
+	}
+	return dispatchToHandler(*location, request);
 }
 
 HttpResponse Router::dispatchToHandler(LocationConfig& config,
